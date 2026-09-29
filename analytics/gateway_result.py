@@ -100,6 +100,10 @@ DEFAULTS: Dict[str, Any] = {
     "max_silence_percent": 2.0,
     "max_late_percent": 5.0,
     "min_packets_for_rate": 50,
+    # Tham số phân tích tương quan (không có tiền tố `criteria_`).
+    "ping_down_threshold": 2,
+    "correlation_window_seconds": 5,
+    "silent_window_threshold": 2,
 }
 
 
@@ -111,6 +115,83 @@ def _cfg(config: Any, name: str, default: Any) -> Any:
     if value in (None, ""):
         value = default
     return value
+
+
+#: Các ngưỡng tiêu chí cần chốt vào `meta.json` của phiên (tên KHÔNG kèm `criteria_`).
+THRESHOLD_KEYS: Tuple[str, ...] = (
+    "min_coverage_percent",
+    "min_ping_ok_percent",
+    "max_downtime_seconds",
+    "max_silence_percent",
+    "max_late_percent",
+    "min_packets_for_rate",
+)
+
+#: Tham số phân tích ảnh hưởng kết quả nên phải chốt cùng ngưỡng tiêu chí.
+#: - `ping_down_threshold`: số lần ping fail liên tiếp mới tính là 1 lần mất kết
+#:   nối → quyết định trực tiếp tiêu chí "Thời gian mất kết nối".
+#: - `correlation_window_seconds` / `silent_window_threshold`: dựng lại
+#:   `correlation_summary` (tiêu chí "Kết nối MQTT", "Ổn định MQTT").
+ANALYSIS_KEYS: Tuple[str, ...] = (
+    "ping_down_threshold",
+    "correlation_window_seconds",
+    "silent_window_threshold",
+)
+
+
+def _analysis_param(config: Any, name: str, default: int) -> int:
+    """Đọc tham số phân tích từ `TestConfig` (tên KHÔNG có tiền tố `criteria_`)."""
+    value = getattr(config, name, None)
+    if value in (None, ""):
+        value = default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def scoring_params_snapshot(config: Any) -> Dict[str, Any]:
+    """Ảnh chụp MỌI tham số ảnh hưởng kết quả chấm → chốt vào `meta.json`.
+
+    Vì sao phải chốt: `config.json` có thể bị sửa SAU khi phiên chạy xong. Nếu
+    lúc CHẤM LẠI mà đọc tham số hiện tại thì một phiên đã đạt có thể bị kết luận
+    trượt (hoặc ngược lại) chỉ vì ai đó đổi ngưỡng — phiên test 3-4 ngày không
+    được phép "tự đổi kết quả". Chốt vào `meta.json` giữ kết quả bất biến.
+
+    Ngưỡng tiêu chí nằm ở tiền tố `criteria_`; tham số tương quan KHÔNG có tiền
+    tố đó (xem `analysis/correlation.py`), nên phải chốt riêng.
+    """
+    snapshot: Dict[str, Any] = {
+        name: _cfg(config, name, DEFAULTS[name]) for name in THRESHOLD_KEYS
+    }
+    for name in ANALYSIS_KEYS:
+        snapshot[name] = _analysis_param(
+            config, name, int(DEFAULTS.get(name, 5))
+        )
+    return snapshot
+
+
+class ScoringParams:
+    """Config giả để chấm lại theo tham số đã chốt trong `meta.json`.
+
+    Dùng đúng giao diện mà `_cfg` tìm (`criteria_<tên>` rồi `<tên>`) nên
+    `GatewayResultEvaluator` không cần biết nó đang đọc config thật hay ảnh chụp.
+    """
+
+    def __init__(self, values: Mapping[str, Any]) -> None:
+        for name in THRESHOLD_KEYS:
+            raw = values.get(name)
+            if raw in (None, ""):
+                continue
+            if name == "min_packets_for_rate":
+                setattr(self, "criteria_" + name, int(float(raw)))
+            else:
+                setattr(self, "criteria_" + name, float(raw))
+        for name in ANALYSIS_KEYS:
+            raw = values.get(name)
+            if raw in (None, ""):
+                continue
+            setattr(self, name, int(float(raw)))
 
 
 # ---------------------------------------------------------------------------

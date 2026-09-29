@@ -159,7 +159,8 @@ class MainWindow(QMainWindow):
         # Tab lịch sử đứng NGAY TRƯỚC tab Cấu hình: người dùng xem lại phiên cũ
         # thường xuyên hơn sửa cấu hình. `data_dir` là nguồn duy nhất của tab này
         # (đọc `meta.json` + `reports/*.csv`), không giữ trạng thái nào khác.
-        self.history_tab = HistoryTab(self.store.data_dir(), self.devices, self)
+        self.history_tab = HistoryTab(self.store.data_dir(), self.devices, self,
+                                      config=self.config)
         self.config_tab = ConfigTab(self.config, self)
 
         self.tabs.addTab(self.monitor_tab, "📡  Giám sát")

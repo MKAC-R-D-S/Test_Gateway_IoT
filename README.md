@@ -52,7 +52,7 @@ Mỗi lần chạy tạo `data/<YYYYMMDD_HHMMSS>_<suffix>/`:
 
 | Đường dẫn | Nội dung |
 |---|---|
-| `meta.json` | Thông tin phiên: run_id, broker, topic, gateway, thời điểm bắt đầu/kết thúc, trạng thái. Cập nhật định kỳ **60 s** → PC tắt đột ngột vẫn biết phiên chạy tới đâu (`status` còn `RUNNING` = bị tắt đột ngột). Gồm cả **`label`** (tên phiên do người dùng đặt — xem §8) và **`gateway_names`** (ảnh chụp `{UID → tên}` lúc bắt đầu phiên). |
+| `meta.json` | Thông tin phiên: run_id, broker, topic, gateway, thời điểm bắt đầu/kết thúc, trạng thái. Cập nhật định kỳ **60 s** → PC tắt đột ngột vẫn biết phiên chạy tới đâu (`status` còn `RUNNING` = bị tắt đột ngột). Gồm cả **`label`** (tên phiên do người dùng đặt — xem §8), **`gateway_names`** (ảnh chụp `{UID → tên}` lúc bắt đầu phiên) và **`scoring_params`** (ảnh chụp ngưỡng chấm điểm lúc bắt đầu phiên — dùng khi chấm lại phiên cũ, xem §4). |
 | `mqtt/mqtt_data_*.csv` | Mọi bản tin tool nhận được (DATA / INFO / ERROR / LOG / UNKNOWN) — 36 cột, kèm kết quả phân tích SEQ. **Một bản tin logic = một dòng**, không phải một dòng cho mỗi lần publish (xem §4 “Gộp bản tin trùng giữa nhiều gateway”). |
 | `mqtt/mqtt_missing_*.csv` | Từng khoảng SEQ bị thiếu (node, seq từ → đến, số gói thiếu). |
 | `mqtt/mqtt_anomalies_*.csv` | Bất thường dữ liệu (trùng, sai thứ tự, reset SEQ, giá trị cảm biến lạ…). |
@@ -392,6 +392,66 @@ phiên đạt hay không.
 > downtime) và cột `gap_pattern` (§4 “Node trọng tâm”) để biết đó là **mất link**
 > hay **lỗi thu sóng**.
 
+### Chấm lại kết quả cho phiên CŨ (nút “⚖ Chấm lại kết quả”)
+
+Phiên chạy bằng bản tool **cũ** (trước khi có `analytics/gateway_result.py`)
+không có `reports/gateway_result.csv`, nên tab Lịch sử phiên không hiện được ĐẠT /
+KHÔNG ĐẠT. Nút **⚖ Chấm lại kết quả** ở tab **📜 Lịch sử phiên** (§8) dựng lại kết
+quả **từ dữ liệu thô còn trên đĩa** rồi **ghi thêm** báo cáo vào chính thư mục
+phiên đó.
+
+**Bất biến quan trọng nhất: KHÔNG sửa dữ liệu thô.** Nút chỉ **đọc**
+`mqtt/mqtt_data_*.csv`, `ping/ping_*.csv`, `mqtt/gateway_log_*.csv` (và
+`reports/focused_node_summary.csv` nếu có) rồi **ghi thêm file** vào `reports/`:
+`gateway_result.csv`, và cập nhật lại `reports/run_summary.csv` (4 cột
+`gateways_passed`, `gateways_failed`, `result`, `result_reason`). Không file nào
+trong `mqtt/` hay `ping/` bị ghi đè — có kiểm tra byte-for-byte trong
+`tests/smoke_test.py` §5c và `tests/gui_smoke_test.py` §10e.
+
+| Tình huống | Hành vi |
+|---|---|
+| Phiên **đang chạy thật** (`run_id` trùng `active_run_id`) | **Nút tắt**; nếu cố bấm chỉ hiện cảnh báo — không chạy song song với lúc pipeline đang ghi `reports/` của chính phiên đó |
+| Phiên còn sót `status = RUNNING` nhưng **đã bị tắt ngang** | **Nút vẫn bật** — quyền quyết định là `active_run_id`, không phải `status` trong `meta.json` (xem §8 “Nhãn trạng thái”) |
+| Phiên thiếu `mqtt/mqtt_data_*.csv` | Báo lỗi, không chấm (độ phủ bản tin không có nguồn nào khác) |
+| Phiên thiếu `ping/ping_*.csv` **và** không có `reports/ping_summary.csv` | Vẫn chấm được nhưng kèm cảnh báo; nhóm tiêu chí ping để `N/A` |
+| Phiên thiếu `reports/focused_node_summary.csv` | Tiêu chí `c_late` để **`N/A`** — không thể biết bắn hụt nếu chưa từng bật node trọng tâm |
+| `meta.json` **chưa có** `scoring_params` (phiên bản tool cũ) | Dùng ngưỡng **trong `config.json` hiện tại** và hiện cảnh báo, vì ngưỡng lúc chạy phiên không được lưu lại |
+| Phiên có `scoring_params` | Dùng **đúng ngưỡng của phiên**; ngưỡng trong `config.json` hiện tại bị bỏ qua |
+
+**Vì sao cần `scoring_params` trong `meta.json`.** Từ bản này, `meta.json` của mỗi
+phiên mới lưu thêm **ảnh chụp ngưỡng chấm điểm** (`scoring_params` —
+`analytics/gateway_result.py` → `scoring_params_snapshot`). Không có nó thì một
+phiên chạy với `criteria_min_ping_ok_percent = 85` sẽ bị chấm lại bằng ngưỡng
+`90` trên máy hôm nay → ra kết quả khác dù dữ liệu không đổi. Đây cũng là quy tắc
+áp dụng khi `stop()` chốt báo cáo, nên kết quả chốt lúc chạy và kết quả chấm lại
+luôn nhất quán.
+
+**Chi phí.** Nút phải đọc lại toàn bộ CSV thô nên **chậm vài giây** với phiên dài
+(phiên 3–4 ngày có thể ~870 000 dòng ⇒ ~10 s). Việc chấm chạy trong `QThread`
+(`RescoreWorker`) nên GUI không treo; sau khi xong, nhãn trạng thái hiện kết luận
+ngay và danh sách phiên được cập nhật lại (cột **Số báo cáo** tăng, tiêu đề khối
+thông tin hiện **ĐẠT / KHÔNG ĐẠT**).
+
+**Một lệnh chấm lại là idempotent:** bấm lần hai trên cùng một phiên (khi ngưỡng
+không đổi) cho ra **cùng kết quả, cùng lý do, và file `gateway_result.csv` giống
+hệt từng byte** — đã kiểm tra trong `tests/smoke_test.py` §5c.
+
+Mã nguồn: `analytics/gateway_rescore.py` — `run_data_sources(run_dir)`,
+`rescore_run(run_dir, config, session_params=…)` → `RescoreResult`
+(`summary_text()`, `warnings`, `written`, `params_from_session`),
+`read_result_rows(run_dir)`, `result_overall(run_dir)`. Test:
+`tests/test_gateway_rescore.py` (24 ca) + `tests/smoke_test.py` §5c +
+`tests/gui_smoke_test.py` §10e.
+
+### Thứ tự ghi báo cáo khi dừng phiên (đã sửa)
+
+`RuntimeRunner.stop()` phải **`logs.flush_all()` TRƯỚC `pipeline.write_reports()`**.
+`write_reports()` **đọc lại CSV từ đĩa** để tổng hợp, nên nếu các dòng cuối còn nằm
+trong bộ đệm của `CsvSink` thì báo cáo bị **hụt đuôi**. Lỗi này từng làm
+`correlation_summary.csv` của phiên `20260921_092453_2007199E139C` thừa 6 dòng so
+với báo cáo đã chốt; đúng 6 dòng cuối đó là phần bị cắt. Thứ tự hiện tại:
+`flush_all()` → `write_reports()` → `logs.stop()` → cập nhật `meta.json`.
+
 ## 5. Ràng buộc thiết kế (vì sao tool "chịu" được 3–4 ngày)
 
 1. **CSV là source of truth**, GUI chỉ là lớp xem. Đóng cửa sổ không làm mất dữ liệu.
@@ -434,8 +494,9 @@ cần broker MQTT và tự dọn thư mục tạm sau khi xong.
 # 1) Logic: config, parse payload thật, phân tích SEQ, CSV, báo cáo, session
 python tests/smoke_test.py
 
-# 2) Unit test (pytest) — gồm tests/test_focused_node.py cho bắt hụt / bắn hụt
-#    và tests/test_gateway_result.py cho kết quả ĐẠT / KHÔNG ĐẠT từng tiêu chí
+# 2) Unit test (pytest) — gồm tests/test_focused_node.py cho bắt hụt / bắn hụt,
+#    tests/test_gateway_result.py cho kết quả ĐẠT / KHÔNG ĐẠT từng tiêu chí,
+#    và tests/test_gateway_rescore.py (24 ca) cho việc chấm lại phiên cũ
 python -m pytest tests/ -q
 
 # 3) GUI: import mọi module ui/*, dựng MainWindow rồi đóng (offscreen)
@@ -524,7 +585,13 @@ Nếu phiên **không có báo cáo** (tắt ngang), các trang sẽ trống và
 một dòng cảnh báo màu vàng ở khối thông tin phiên — *“⚠ Phiên này không có (hoặc
 thiếu) báo cáo trong `reports/` — có thể tiến trình bị tắt ngang. Bản tin thô vẫn
 còn trong `mqtt/` và tra được ở tab Tìm kiếm.”* — dữ liệu thô **không mất**, chỉ
-là chưa được chốt thành báo cáo.
+là chưa được chốt thành báo cáo. Với những phiên như vậy, bấm **⚖ Chấm lại kết
+quả** (§4 “Chấm lại kết quả cho phiên CŨ”) để dựng lại kết quả từ dữ liệu thô —
+tool sẽ thêm `reports/gateway_result.csv` mà không chạm vào `mqtt/` và `ping/`.
+
+Khi phiên đã có kết quả, **kết luận được hiện ngay trên khối thông tin phiên**
+(`Kết quả: ĐẠT` / `Kết quả: KHÔNG ĐẠT`, tô xanh/đỏ như trang *Đạt / Không đạt*)
+để không phải cuộn xuống bảng.
 
 **Tên gateway của phiên đã chốt — xoá/đổi gateway trong tab Thiết bị KHÔNG ảnh
 hưởng lịch sử.** Khi bắt đầu phiên, tool ghi vào `meta.json` một **ảnh chụp**
@@ -604,6 +671,7 @@ mapping)` trong `storage/session.py`.
 |---|---|
 | **🔄 Làm mới danh sách** | Quét lại `data/runs/`, cập nhật danh sách + trạng thái (dùng khi phiên đang chạy chuyển sang “Đã dừng”) |
 | **Lọc** (combo) | `Tất cả phiên` / `Đã chốt báo cáo` / `Tắt ngang / thiếu báo cáo` — lọc ngay trên bảng |
+| **⚖ Chấm lại kết quả** | Dựng lại ĐẠT / KHÔNG ĐẠT cho phiên đang chọn **từ CSV thô** rồi **ghi thêm** `reports/gateway_result.csv` + cập nhật `run_summary.csv`. **Không sửa** `mqtt/`/`ping/`. Dùng cho phiên chạy bằng bản tool cũ (chưa có kết quả). Tắt với phiên tool đang chạy thật (`active_run_id`). Xem §4 “Chấm lại kết quả cho phiên CŨ” |
 | **Gateway:** (ô tìm kiếm) | Lọc bảng theo **UID hoặc tên gateway** (khớp một phần, không phân biệt hoa/thường, khớp cả biến thể UID 11/12 hex); **giao với** combo Lọc |
 | **✖ Xoá tìm kiếm** | Xoá từ khoá gateway, hiện lại mọi phiên |
 | **✏ Đặt / đổi tên phiên** | Đặt/sửa/xoá **tên phiên** của phiên đang chọn (kể cả phiên đang chạy) — ghi vào `meta.json` |
@@ -623,6 +691,13 @@ API đọc lịch sử nằm trong `storage/session.py`:
 - `fill_session_gateway_names(run_dir, mapping, overwrite=False)` → bổ sung tên gateway theo UID vào `meta.json` của phiên; mặc định **chỉ điền chỗ thiếu**, trả `{"added", "skipped", "unmatched", "changed"}`.
 - `normalize_session_label(text)` → gọt khoảng trắng + cắt còn 120 ký tự (tên phiên).
 - `set_session_label(run_dir, label)` → đặt/sửa/xoá **tên phiên** của một phiên đã chạy (lưu ngay vào `meta.json`).
+
+Chấm lại kết quả nằm trong `analytics/gateway_rescore.py`:
+
+- `run_data_sources(run_dir)` → `dict` mô tả nguồn dữ liệu thô của phiên (`has_mqtt`, `has_ping`, danh sách file, …).
+- `rescore_run(run_dir, config=None, *, session_params=None, progress=None)` → `RescoreResult` (dựng lại bảng kết quả + ghi `reports/gateway_result.csv`); ném `RescoreError` nếu phiên không có `mqtt_data_*.csv`.
+- `read_result_rows(run_dir)` / `result_overall(run_dir)` → đọc lại kết quả đã chấm (dòng TỔNG nằm cuối file).
+- `rescore_device_names(run_dir)` → tên gateway dùng để chấm (ưu tiên ảnh chụp trong `meta.json`).
 
 Danh mục UID → tên nằm trong `core/gateway_directory.py`:
 

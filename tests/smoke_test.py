@@ -994,6 +994,87 @@ def main() -> int:
                       "%d + %d vs %s"
                       % (passed, failed, values.get("gateways_monitored")))
 
+        # --- 5c. CHẤM LẠI kết quả từ CSV thô (nút "⚖ Chấm lại kết quả") --------
+        # Vì sao cần: phiên cũ (chạy bằng bản tool ghi báo cáo TRƯỚC khi chốt CSV,
+        # hoặc bị tắt ngang) không có `reports/gateway_result.csv` — tab Lịch sử
+        # vì thế không hiện được ĐẠT/KHÔNG ĐẠT. Chấm lại phải DỰNG LẠI kết quả chỉ
+        # từ dữ liệu thô trong `mqtt/` + `ping/`, ghi THÊM báo cáo, và TUYỆT ĐỐI
+        # không sửa dữ liệu thô (bất biến quan trọng nhất của tính năng).
+        print("\n[5c] Chấm lại kết quả từ CSV thô (dữ liệu thô không bị sửa)")
+        from analytics.gateway_rescore import (  # noqa: E402
+            GATEWAY_RESULT_FILENAME,
+            rescore_run,
+            result_overall,
+            run_data_sources,
+        )
+
+        raw_files = (sorted((session.run_dir / "mqtt").glob("*.csv"))
+                     + sorted((session.run_dir / "ping").glob("*.csv")))
+        raw_before = {path: path.read_bytes() for path in raw_files}
+        result_path = session.run_dir / "reports" / GATEWAY_RESULT_FILENAME
+        result_path.unlink(missing_ok=True)
+
+        sources = run_data_sources(session.run_dir)
+        check(sources["has_mqtt"] is True,
+              "chấm lại: phát hiện được mqtt_data_*.csv của phiên",
+              "nhận %r" % [path.name for path in sources["mqtt_files"]])
+
+        rescored = rescore_run(session.run_dir, TestConfig())
+        check(result_path.exists() and result_path in rescored.written,
+              "chấm lại: ghi được reports/%s" % GATEWAY_RESULT_FILENAME,
+              "đã ghi %r" % [path.name for path in rescored.written])
+        check(rescored.gateways_scored >= 1,
+              "chấm lại: chấm được ít nhất 1 gateway",
+              "nhận %d" % rescored.gateways_scored)
+        check(rescored.gateways_passed + rescored.gateways_failed
+              == rescored.gateways_scored,
+              "chấm lại: ĐẠT + KHÔNG ĐẠT = số gateway đã chấm",
+              "%d + %d vs %d" % (rescored.gateways_passed,
+                                 rescored.gateways_failed,
+                                 rescored.gateways_scored))
+        check({path: path.read_bytes() for path in raw_files} == raw_before,
+              "chấm lại: mqtt/ và ping/ KHÔNG bị sửa một byte nào")
+
+        with open(result_path, "r", encoding="utf-8-sig", newline="") as handle:
+            rescored_rows = list(csv_read(handle))
+        check(bool(rescored_rows) and rescored_rows[0] == GATEWAY_RESULT_COLUMNS,
+              "chấm lại: gateway_result.csv đủ cột và ĐÚNG THỨ TỰ schema",
+              "nhận %r" % (rescored_rows[0] if rescored_rows else None))
+        check(bool(rescored_rows) and rescored_rows[-1][0] == "TỔNG",
+              "chấm lại: dòng TỔNG nằm CUỐI (tab Lịch sử dựa vào bất biến này)",
+              "nhận %r" % (rescored_rows[-1][:1] if rescored_rows else None))
+        check(result_overall(session.run_dir).get("gateway_uid") == "TỔNG",
+              "chấm lại: result_overall() đọc lại được dòng TỔNG")
+
+        # `run_summary.csv` phải được làm mới cùng lúc, nếu không trang "Tổng kết"
+        # sẽ hiện kết quả cũ còn bảng gateway hiện kết quả mới.
+        with open(reports["run_summary"], "r", encoding="utf-8-sig",
+                  newline="") as handle:
+            summary_reader = csv_read(handle)
+            summary_header = next(summary_reader, [])
+            summary_values = dict(zip(summary_header, next(summary_reader, [])))
+        check(summary_values.get("gateways_passed")
+              == str(rescored.gateways_passed)
+              and summary_values.get("gateways_failed")
+              == str(rescored.gateways_failed)
+              and summary_values.get("result") == rescored.result,
+              "chấm lại: làm mới 4 cột kết quả trong run_summary.csv",
+              "nhận passed=%r failed=%r result=%r — chờ %r"
+              % (summary_values.get("gateways_passed"),
+                 summary_values.get("gateways_failed"),
+                 summary_values.get("result"), rescored.result))
+
+        # Chấm lần hai phải ra CÙNG kết luận và ghi ra file Y HỆT: dữ liệu thô là
+        # nguồn sự thật duy nhất, không có trạng thái ẩn nào tích lũy giữa 2 lần.
+        first_bytes = result_path.read_bytes()
+        again = rescore_run(session.run_dir, TestConfig())
+        check(again.result == rescored.result
+              and again.result_reason == rescored.result_reason,
+              "chấm lại lần hai cho CÙNG kết luận",
+              "%r vs %r" % (again.result, rescored.result))
+        check(result_path.read_bytes() == first_bytes,
+              "chấm lại lần hai ghi ra file y hệt (không tích lũy trạng thái)")
+
         # --- 6. session finish ------------------------------------------------
         print("\n[6] RunSession: chốt phiên")
         session.finish(STATUS_STOPPED, "smoke test")

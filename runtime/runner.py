@@ -35,6 +35,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from analytics.anomaly_detector import AlertRecord
 from analytics.focused_node import normalize_focus_node
+from analytics.gateway_result import scoring_params_snapshot
 from core.config import ConfigStore, GatewayDevice, TestConfig
 from core.models import MQTTRecord, PingRecord
 from core.pipeline import MonitorPipeline
@@ -175,6 +176,10 @@ class MonitorRunner:
             # Ảnh chụp gồm cả gateway đang TẮT (`enabled = False`) để phần
             # "Gateway của phiên" không mất tên của các gateway đã cấu hình.
             gateway_names=snapshot_gateway_names(self.devices),
+            # Chốt NGƯỠNG chấm ĐẠT/KHÔNG ĐẠT đang dùng. Nhờ vậy khi CHẤM LẠI
+            # phiên này (nút "⚖ Chấm lại kết quả" ở tab Lịch sử phiên), kết quả
+            # vẫn theo đúng ngưỡng của lúc chạy dù `config.json` đã bị sửa.
+            scoring_params=scoring_params_snapshot(self.config),
             # TÊN PHIÊN người dùng đặt (rỗng = dùng `run_id`). Ghi vào meta.json nên
             # đổi được về sau mà không ảnh hưởng dữ liệu của phiên.
             label=label,
@@ -285,7 +290,17 @@ class MonitorRunner:
             except Exception:  # noqa: BLE001
                 log.exception("Lỗi khi dừng pipeline")
 
-        # 3) Ghi báo cáo TRƯỚC khi đóng sink (vì write_single_csv ghi trực tiếp)
+        # 3) Flush CSV TRƯỚC khi ghi báo cáo: write_reports() đọc lại chính các
+        #    file mqtt_data_*.csv / ping_log_*.csv từ đĩa, nên nếu còn dòng nằm
+        #    trong queue của sink thì báo cáo sẽ thiếu phần đuôi phiên.
+        #    (Bản giữa phiên write_reports_now() đã làm đúng thứ tự này.)
+        if self.logs is not None:
+            try:
+                self.logs.flush_all()
+            except Exception:  # noqa: BLE001
+                log.exception("Lỗi khi flush CSV sink trước khi ghi báo cáo")
+
+        # 4) Ghi báo cáo (write_single_csv ghi trực tiếp vào reports/)
         reports: Dict[str, str] = {}
         if self.pipeline is not None and self.logs is not None:
             try:
@@ -297,15 +312,14 @@ class MonitorRunner:
                 log.exception("Lỗi khi ghi báo cáo")
                 self._state.error = "Ghi báo cáo lỗi: %s" % exc
 
-        # 4) Flush + đóng tất cả sink
+        # 5) Đóng tất cả sink
         if self.logs is not None:
             try:
-                self.logs.flush_all()
                 self.logs.stop()
             except Exception:  # noqa: BLE001
                 log.exception("Lỗi khi đóng CSV sink")
 
-        # 5) Cập nhật meta.json — luôn ghi, kể cả khi bước trên lỗi
+        # 6) Cập nhật meta.json — luôn ghi, kể cả khi bước trên lỗi
         if self.session is not None:
             try:
                 self.session.finish(STATUS_STOPPED, reason)

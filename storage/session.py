@@ -74,6 +74,13 @@ class RunSession:
     #: Phiên không có ảnh chụp (meta.json của bản tool cũ) sẽ quay về tra tên
     #: sống trong `devices.json` — xem `ui/history_tab.py`.
     gateway_names: Dict[str, str] = field(default_factory=dict)
+    #: Tham số chấm điểm đã dùng lúc BẮT ĐẦU phiên: ngưỡng `criteria_*` của
+    #: `TestConfig` + tham số phân tích tương quan (`correlation_window_seconds`,
+    #: `silent_window_threshold`). Chốt vào `meta.json` để khi CHẤM LẠI một phiên
+    #: cũ vẫn dùng đúng tham số của lúc chạy, không bị `config.json` hiện tại
+    #: (có thể đã bị sửa) làm sai kết quả. Phiên của bản tool cũ không có khoá
+    #: này → rỗng, khi đó dùng tham số đang cấu hình.
+    scoring_params: Dict[str, Any] = field(default_factory=dict)
     #: TÊN PHIÊN do người dùng đặt (rỗng = dùng `run_id`). Sửa được BẤT CỨ LÚC NÀO
     #: qua tab "Lịch sử phiên" → ghi thẳng vào `meta.json`; không ảnh hưởng tên
     #: thư mục, `run_id` hay dữ liệu CSV nên sửa/xoá gateway hay chạy lại phiên
@@ -186,6 +193,9 @@ class RunSession:
             {str(k): str(v) for k, v in names.items()}
             if isinstance(names, dict) else {}
         )
+        # Tham số chấm điểm của phiên (chỉ bản tool mới ghi).
+        params = data.get("scoring_params")
+        session.scoring_params = dict(params) if isinstance(params, dict) else {}
         session.status = str(data.get("status", STATUS_RUNNING))
         session.tool_version = str(data.get("tool_version", ""))
         session.stop_reason = str(data.get("stop_reason", ""))
@@ -387,6 +397,7 @@ def create_session(
     tool_version: str = "",
     gateway_names: Optional[Dict[str, str]] = None,
     label: str = "",
+    scoring_params: Optional[Dict[str, Any]] = None,
 ) -> RunSession:
     """Tạo + lưu `RunSession` mới."""
     run_dir = create_run_dir(data_dir, gateway_uids)
@@ -400,6 +411,7 @@ def create_session(
         gateways_monitored=len([u for u in (gateway_uids or []) if u]),
         gateway_uids=[u for u in (gateway_uids or []) if u],
         gateway_names=dict(gateway_names or {}),
+        scoring_params=dict(scoring_params or {}),
         label=normalize_session_label(label),
         status=STATUS_RUNNING,
         tool_version=tool_version,
@@ -594,6 +606,10 @@ def run_history_row(
         "status": session.status,
         "status_label": describe_status(session, active_run_id),
         "finalized": bool(session.ended_at),
+        # Ảnh chụp tham số chấm (ngưỡng + tham số tương quan) chốt lúc BẮT ĐẦU
+        # phiên. Tab Lịch sử dùng nó để chấm lại phiên đúng ngưỡng cũ; phiên của
+        # bản tool cũ không có khoá này nên là {}.
+        "scoring_params": dict(session.scoring_params or {}),
         "duration_seconds": duration,
         "duration_label": duration_label,
         "duration_hours": round(duration / 3600.0, 2) if duration else "",
