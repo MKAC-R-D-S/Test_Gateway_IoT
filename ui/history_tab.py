@@ -61,6 +61,7 @@ from storage.schema import (
     FOCUSED_NODE_MISSING_COLUMNS,
     FOCUSED_NODE_SUMMARY_COLUMNS,
     GATEWAY_DOWNTIME_COLUMNS,
+    GATEWAY_RESULT_COLUMNS,
     NODE_SUMMARY_COLUMNS,
     PING_SUMMARY_COLUMNS,
     SILENCE_COLUMNS,
@@ -99,6 +100,22 @@ MAX_REPORT_ROWS = 20000
 #: Các trang kết quả: (khoá, tiêu đề tab, tên file trong `reports/`, cột, header).
 #: Cột/header lấy đúng từ `storage/schema.py` nên tên cột CSV luôn khớp nhau.
 REPORT_PAGES: List[Tuple[str, str, str, Sequence[str], Sequence[str]]] = [
+    (
+        "result",
+        "Đạt / Không đạt",
+        "gateway_result.csv",
+        GATEWAY_RESULT_COLUMNS,
+        [
+            "Gateway", "Tên", "IP", "Bản tin MQTT", "Bản tin đã gửi",
+            "Mẫu số (cả cụm)", "Độ phủ (%)", "Bắt hụt (%)", "Tổng ping",
+            "Ping OK (%)", "Số lần mất", "Mất (s)", "Số window",
+            "Window im lặng", "Im lặng (%)", "Kết luận MQTT↔ping",
+            "Bắn hụt (%)", "1. Có dữ liệu", "2. Độ phủ", "3. Kết nối",
+            "4. Ping", "5. Downtime", "6. Ổn định", "7. Bắn hụt",
+            "Số tiêu chí đạt", "Số tiêu chí trượt", "Không áp dụng",
+            "KẾT QUẢ", "Lý do",
+        ],
+    ),
     (
         "node",
         "Node",
@@ -228,6 +245,10 @@ SUMMARY_FIELDS: List[Tuple[str, str]] = [
     ("downtime_events", "Số lần mất/hồi phục"),
     ("downtime_seconds", "Tổng thời gian downtime (giây)"),
     ("reconnects", "Số lần reconnect MQTT"),
+    ("gateways_passed", "Gateway ĐẠT"),
+    ("gateways_failed", "Gateway KHÔNG ĐẠT"),
+    ("result", "KẾT QUẢ PHIÊN"),
+    ("result_reason", "Lý do"),
 ]
 
 
@@ -343,6 +364,38 @@ PAGE_HEADERS: Dict[Tuple[str, str], str] = {
     ("silence", "ping_ok_windows"): "Window ping OK",
     ("silence", "ping_down_windows"): "Window ping DOWN",
     ("silence", "interpretation"): "Diễn giải",
+    (
+        "result",
+        "gateway_uid",
+    ): "Gateway",
+    ("result", "gateway_name"): "Tên",
+    ("result", "ip_address"): "IP",
+    ("result", "mqtt_packets"): "Bản tin MQTT",
+    ("result", "packets_published"): "Bản tin đã gửi",
+    ("result", "packets_expected"): "Mẫu số (node đã nghe)",
+    ("result", "coverage_percent"): "Độ phủ (%)",
+    ("result", "missed_catch_percent"): "Bắt hụt (%)",
+    ("result", "ping_total"): "Tổng ping",
+    ("result", "ping_success_rate_percent"): "Ping OK (%)",
+    ("result", "downtime_events"): "Số lần mất kết nối",
+    ("result", "downtime_seconds"): "Mất kết nối (s)",
+    ("result", "windows_total"): "Số window",
+    ("result", "silence_windows"): "Window im lặng",
+    ("result", "silence_percent"): "Im lặng (%)",
+    ("result", "verdict"): "Kết luận MQTT↔ping",
+    ("result", "late_percent"): "Bắn hụt (%)",
+    ("result", "c_valid"): "1. Có dữ liệu",
+    ("result", "c_coverage"): "2. Độ phủ",
+    ("result", "c_link"): "3. Kết nối",
+    ("result", "c_ping"): "4. Ping",
+    ("result", "c_downtime"): "5. Downtime",
+    ("result", "c_stable"): "6. Ổn định",
+    ("result", "c_late"): "7. Bắn hụt",
+    ("result", "criteria_passed"): "Số tiêu chí đạt",
+    ("result", "criteria_failed"): "Số tiêu chí trượt",
+    ("result", "criteria_na"): "Không áp dụng",
+    ("result", "result"): "KẾT QUẢ",
+    ("result", "result_reason"): "Lý do",
     ("alerts", "timestamp"): "Thời điểm",
     ("alerts", "level"): "Mức",
     ("alerts", "alert_type"): "Loại",
@@ -365,6 +418,9 @@ PAGE_FORMATTERS = {
     "start": _fmt_dt, "end": _fmt_dt, "timestamp": _fmt_dt,
     "received_at": _fmt_dt, "gateway_timestamp": _fmt_dt,
     "success_rate_percent": lambda v: fmt_float(v, 2),
+    "ping_success_rate_percent": lambda v: fmt_float(v, 2),
+    "coverage_percent": lambda v: fmt_float(v, 2),
+    "silence_percent": lambda v: fmt_float(v, 2),
     "missed_catch_percent": lambda v: fmt_float(v, 2),
     "late_percent": lambda v: fmt_float(v, 2),
     "delivery_rate_percent": lambda v: fmt_float(v, 2),
@@ -392,7 +448,19 @@ PAGE_INT_COLUMNS = (
     "windows_ping_down", "windows_ping_down_mqtt_silent",
     "windows_ping_ok_mqtt_silent", "mqtt_packets", "ping_ok_windows",
     "ping_down_windows",
+    # --- trang "Đạt / Không đạt" ---
+    "packets_published", "packets_expected", "silence_windows",
+    "criteria_passed", "criteria_failed", "criteria_na",
 )
+
+
+#: Tô màu theo cột cho từng trang: `khoá trang → (cột tô màu, bảng màu)`.
+#: Trang nào không có ở đây vẫn được tô theo cột `level` (bảng màu mức cảnh báo)
+#: như trước — nhiều bảng không có cột `level` nên mặc định này vô hại.
+PAGE_COLORS: Dict[str, Tuple[str, Dict[str, str]]] = {
+    "result": ("result", dict(theme.RESULT_COLORS)),
+    "alerts": ("level", dict(theme.LEVEL_COLORS)),
+}
 
 
 def _page_headers(key: str, columns: Sequence[str]) -> List[str]:
@@ -689,14 +757,19 @@ class HistoryTab(QWidget):
             formatters.setdefault(col, fmt_int)
         # Cột nào không có nhãn tiếng Việt riêng thì tự chuyển từ tên cột CSV.
         labels = list(headers) if headers else _page_headers(key, columns)
+        # Màu: trang "Đạt / Không đạt" tô theo cột `result`, trang Cảnh báo tô
+        # theo `level`; còn lại giữ mặc định cũ (`level`) cho tương thích.
+        color_column, color_map = PAGE_COLORS.get(
+            key, ("level", dict(theme.LEVEL_COLORS))
+        )
         model = DictTableModel(
             list(columns),
             labels,
             max_rows=MAX_REPORT_ROWS,
             formatters=formatters,
             align_right=PAGE_INT_COLUMNS,
-            color_column="level",
-            color_map=dict(theme.LEVEL_COLORS),
+            color_column=color_column,
+            color_map=dict(color_map),
         )
         table = QTableView()
         table.setModel(model)

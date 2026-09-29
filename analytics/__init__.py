@@ -23,6 +23,20 @@ from .correlation import (
     GatewayCorrelation,
     correlate,
 )
+from .gateway_result import (
+    CRITERIA,
+    DEFAULTS,
+    FAIL,
+    NA,
+    PASS,
+    RESULT_FAIL,
+    RESULT_PASS,
+    TOTAL_UID,
+    GatewayResult,
+    GatewayResultEvaluator,
+    compute_coverage,
+    expected_for_gateway,
+)
 from .ping_stats import PingStats, PingTracker, summarize_ping_csv
 from .sequence_tracker import SeqOutcome, SeqState, SequenceTracker
 
@@ -56,4 +70,17 @@ __all__ = [
     "VERDICT_PARTIAL",
     "VERDICT_NO_DATA",
     "VERDICT_LABELS",
+    # Đạt / không đạt
+    "GatewayResultEvaluator",
+    "GatewayResult",
+    "compute_coverage",
+    "expected_for_gateway",
+    "CRITERIA",
+    "DEFAULTS",
+    "PASS",
+    "FAIL",
+    "NA",
+    "RESULT_PASS",
+    "RESULT_FAIL",
+    "TOTAL_UID",
 ]

@@ -65,6 +65,18 @@ STATE_COLORS = {
     "ERROR": COLOR_CRIT,
 }
 
+# Màu cho kết quả đạt / không đạt (`reports/gateway_result.csv`).
+# Khoá phải là chữ HOA vì `DictTableModel` tra màu bằng `str(...).upper()`.
+RESULT_COLORS = {
+    "ĐẠT": COLOR_OK,
+    "KHÔNG ĐẠT": COLOR_CRIT,
+    "PASS": COLOR_OK,
+    "FAIL": COLOR_CRIT,
+    # `N/A` = không áp dụng được (không bật ping, mẫu quá nhỏ, không bật node
+    # trọng tâm) — khác hẳn FAIL nên KHÔNG dùng màu đỏ.
+    "N/A": COLOR_DIM,
+}
+
 STYLESHEET = """
 QWidget { background: %(bg)s; color: %(text)s; }
 QGroupBox {

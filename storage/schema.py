@@ -177,6 +177,52 @@ CORRELATION_COLUMNS: List[str] = [
 ]
 
 # ---------------------------------------------------------------------------
+# gateway_result.csv — ĐẠT / KHÔNG ĐẠT cho TỪNG gateway theo TỪNG tiêu chí.
+#
+# 1 dòng / gateway + 1 dòng TỔNG ở cuối (`gateway_uid = "TỔNG"`).
+#   `c_*`        : PASS / FAIL / N/A cho từng tiêu chí. `N/A` = không áp dụng
+#                  được (gateway không bật ping, mẫu quá nhỏ, không bật node
+#                  trọng tâm) — KHÁC với FAIL.
+#   `result`     : ĐẠT khi MỌI tiêu chí áp dụng được đều PASS, ngược lại KHÔNG ĐẠT.
+#   `result_reason`: nêu đúng tiêu chí không đạt kèm giá trị thực vs ngưỡng.
+#
+# LƯU Ý: `PING_BLOCKED` được tính là ĐẠT (ICMP bị chặn nhưng gateway vẫn gửi
+# MQTT). `packets_published` / `coverage_percent` tính trên luồng bản tin ĐÃ GỘP
+# nên độ phủ là **chặn trên** (xem `analytics/gateway_result.py`).
+# ---------------------------------------------------------------------------
+GATEWAY_RESULT_COLUMNS: List[str] = [
+    "gateway_uid",
+    "gateway_name",
+    "ip_address",
+    "mqtt_packets",              # bản tin gateway này đã publish (từ correlation)
+    "packets_published",         # bản tin gateway này publish cho các node nó nghe
+    "packets_expected",          # mẫu số: chỉ tính các node gateway này ĐÃ nghe
+    "coverage_percent",          # độ phủ = published / expected
+    "missed_catch_percent",      # 100 − độ phủ (bắt hụt)
+    "ping_total",
+    "ping_success_rate_percent",
+    "downtime_events",
+    "downtime_seconds",
+    "windows_total",
+    "silence_windows",           # window MQTT im lặng
+    "silence_percent",
+    "verdict",                   # kết luận MQTT↔ping (correlation_summary)
+    "late_percent",              # bắn hụt — chỉ có khi bật node trọng tâm
+    "c_valid",                   # 1. Có dữ liệu
+    "c_coverage",                # 2. Độ phủ bản tin
+    "c_link",                    # 3. Kết nối MQTT
+    "c_ping",                    # 4. Tỉ lệ ping
+    "c_downtime",                # 5. Thời gian mất kết nối
+    "c_stable",                  # 6. Ổn định MQTT
+    "c_late",                    # 7. Bắn hụt (gửi trễ)
+    "criteria_passed",
+    "criteria_failed",
+    "criteria_na",
+    "result",                    # ĐẠT / KHÔNG ĐẠT
+    "result_reason",
+]
+
+# ---------------------------------------------------------------------------
 # alerts_<YYYYMMDD>.csv — cảnh báo mức sự kiện (node silent, lỗi chất lượng...)
 # ---------------------------------------------------------------------------
 ALERT_COLUMNS: List[str] = [
@@ -243,6 +289,11 @@ RUN_SUMMARY_COLUMNS: List[str] = [
     "downtime_events",
     "downtime_seconds",
     "reconnects",
+    # --- kết luận ĐẠT / KHÔNG ĐẠT của cả phiên (`gateway_result.csv` dòng TỔNG) ---
+    "gateways_passed",
+    "gateways_failed",
+    "result",
+    "result_reason",
 ]
 
 # ---------------------------------------------------------------------------

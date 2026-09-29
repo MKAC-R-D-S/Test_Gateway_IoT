@@ -60,7 +60,7 @@ from core.uid import (  # noqa: E402
 )
 from storage.csv_writer import LogManager  # noqa: E402
 from storage.reader import SearchQuery, search_mqtt  # noqa: E402
-from storage.schema import MQTT_DATA_COLUMNS  # noqa: E402
+from storage.schema import GATEWAY_RESULT_COLUMNS, MQTT_DATA_COLUMNS  # noqa: E402
 from storage.session import (  # noqa: E402
     STATUS_STOPPED,
     collect_run_history,
@@ -898,16 +898,66 @@ def main() -> int:
             logs2.stop()
 
         for report in ("node_summary", "ping_summary", "correlation_summary",
-                       "mqtt_silence", "alerts", "run_summary"):
+                       "mqtt_silence", "alerts", "run_summary", "gateway_result"):
             check(report in reports and Path(reports[report]).exists(),
                   "báo cáo %s được ghi" % report,
                   "có %s" % sorted(reports))
-        if "node_summary" in reports:
-            with open(reports["node_summary"], "r", encoding="utf-8-sig",
+
+        # --- 5b. gateway_result.csv: ĐẠT/KHÔNG ĐẠT theo TỪNG tiêu chí ----------
+        # Đây là thứ người dùng đọc để kết luận "gateway có đạt hay không", nên
+        # phải kiểm cả HÌNH DẠNG (đủ cột, đúng thứ tự) lẫn NỘI DUNG (mọi tiêu chí
+        # là PASS/FAIL/N/A, dòng TỔNG nằm cuối và khớp với các dòng gateway).
+        if "gateway_result" in reports:
+            with open(reports["gateway_result"], "r", encoding="utf-8-sig",
                       newline="") as handle:
-                node_rows = list(csv_read(handle))
-            check(len(node_rows) >= 2, "node_summary có dòng dữ liệu",
-                  "có %d dòng" % len(node_rows))
+                result_rows = list(csv_read(handle))
+            check(len(result_rows) >= 2,
+                  "gateway_result có ít nhất 1 dòng gateway + 1 dòng TỔNG",
+                  "có %d dòng" % len(result_rows))
+            if len(result_rows) >= 2:
+                header = result_rows[0]
+                check(header == GATEWAY_RESULT_COLUMNS,
+                      "gateway_result đủ %d cột và ĐÚNG THỨ TỰ schema"
+                      % len(GATEWAY_RESULT_COLUMNS),
+                      "nhận %d cột: %s" % (len(header), header))
+                body = [dict(zip(header, row)) for row in result_rows[1:]]
+                check(body[-1].get("gateway_uid") == "TỔNG",
+                      "dòng cuối gateway_result là dòng TỔNG",
+                      "nhận %r" % body[-1].get("gateway_uid"))
+                criteria_cols = [c for c in header if c.startswith("c_")]
+                allowed = {"PASS", "FAIL", "N/A"}
+                bad = [
+                    (row.get("gateway_uid"), key, row.get(key))
+                    for row in body
+                    for key in criteria_cols
+                    if row.get(key) not in allowed
+                ]
+                check(not bad,
+                      "mọi tiêu chí đều là PASS / FAIL / N/A (7 tiêu chí)",
+                      "giá trị lạ: %s" % bad[:5])
+                check(len(criteria_cols) == 7,
+                      "gateway_result có đúng 7 cột tiêu chí",
+                      "có %d: %s" % (len(criteria_cols), criteria_cols))
+                per_gateway = [r for r in body if r.get("gateway_uid") != "TỔNG"]
+                total = body[-1]
+                failed = sum(1 for r in per_gateway if r.get("result") == "KHÔNG ĐẠT")
+                check(
+                    total.get("result")
+                    == ("KHÔNG ĐẠT" if failed else "ĐẠT"),
+                    "dòng TỔNG = ĐẠT chỉ khi MỌI gateway ĐẠT",
+                    "%d/%d gateway trượt, TỔNG=%r"
+                    % (failed, len(per_gateway), total.get("result")),
+                )
+                check(
+                    all(
+                        r.get("result") == ("KHÔNG ĐẠT" if r.get("criteria_failed") not in ("", "0") else "ĐẠT")
+                        for r in per_gateway
+                    ),
+                    "result từng gateway khớp số tiêu chí KHÔNG ĐẠT",
+                    "%s" % [(r.get("gateway_uid"), r.get("criteria_failed"),
+                             r.get("result")) for r in per_gateway][:5],
+                )
+
         if "run_summary" in reports:
             with open(reports["run_summary"], "r", encoding="utf-8-sig",
                       newline="") as handle:
@@ -931,6 +981,18 @@ def main() -> int:
                 check(values.get("data_packets") == "5",
                       "run_summary đếm 5 bản tin DATA logic (không phải 15 lần publish)",
                       "data_packets=%s" % values.get("data_packets"))
+                check(values.get("result") in ("ĐẠT", "KHÔNG ĐẠT"),
+                      "run_summary có kết luận ĐẠT / KHÔNG ĐẠT của cả phiên",
+                      "result=%r" % values.get("result"))
+                check(bool(values.get("result_reason")),
+                      "run_summary có lý do kết luận (result_reason)",
+                      "result_reason=%r" % values.get("result_reason"))
+                passed = int(values.get("gateways_passed") or 0)
+                failed = int(values.get("gateways_failed") or 0)
+                check(passed + failed == int(values.get("gateways_monitored") or 0),
+                      "run_summary: gateway ĐẠT + KHÔNG ĐẠT = gateway đã cấu hình",
+                      "%d + %d vs %s"
+                      % (passed, failed, values.get("gateways_monitored")))
 
         # --- 6. session finish ------------------------------------------------
         print("\n[6] RunSession: chốt phiên")

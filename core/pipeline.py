@@ -765,14 +765,18 @@ class MonitorPipeline:
         )
 
         # --- node trọng tâm: bắt hụt / bắn hụt per gateway ---
+        focused_rows: List[Dict[str, Any]] = []
         if self.focused_node.active:
             # Quét bitmap một lần để có kiểu ngắt quãng (liên tục vs rải rác)
             # trước khi ghi — chi phí ~ms/gateway, chỉ chạy lúc kết thúc phiên.
             self.focused_node.refresh_patterns()
+            # Tính MỘT lần rồi dùng lại cho cả `focused_node_summary.csv` lẫn
+            # tiêu chí "Bắn hụt" — hàm này quét bitmap nên gọi hai lần là phí.
+            focused_rows = self.focused_node.summary_rows()
             written["focused_node_summary"] = self.logs.write_single_csv(
                 "focused_node_summary.csv",
                 FOCUSED_NODE_SUMMARY_COLUMNS,
-                self.focused_node.summary_rows(),
+                focused_rows,
             )
             written["focused_node_missing"] = self.logs.write_single_csv(
                 "focused_node_missing.csv",
@@ -810,6 +814,36 @@ class MonitorPipeline:
         )
         written["mqtt_silence"] = self.logs.write_single_csv(
             "mqtt_silence.csv", SILENCE_COLUMNS, report.silence_events
+        )
+
+        # --- đạt / không đạt theo TỪNG tiêu chí cho TỪNG gateway ---
+        # Chấm ở đây (không chấm lúc chạy) vì cần bằng chứng của CẢ CỤM làm mẫu
+        # số: một bản tin chỉ bị coi là "bắt hụt" khi có ít nhất một gateway đã
+        # publish nó. Mẫu số được giới hạn theo từng gateway (xem
+        # `analytics/gateway_result.py: expected_for_gateway`).
+        from analytics.gateway_result import TOTAL_UID, GatewayResultEvaluator
+        from storage.schema import GATEWAY_RESULT_COLUMNS
+
+        evaluator = GatewayResultEvaluator(self.config)
+        gateway_result_rows = evaluator.evaluate(
+            ping_rows=ping_rows,
+            correlation_gateways=report.gateways,
+            mqtt_rows=mqtt_rows,
+            focused_rows=focused_rows,
+            devices=self.devices,
+        )
+        written["gateway_result"] = self.logs.write_single_csv(
+            "gateway_result.csv", GATEWAY_RESULT_COLUMNS, gateway_result_rows
+        )
+        overall = next(
+            (row for row in gateway_result_rows if row.get("gateway_uid") == TOTAL_UID),
+            {},
+        )
+        gateway_rows = [
+            row for row in gateway_result_rows if row.get("gateway_uid") != TOTAL_UID
+        ]
+        gateways_failed = sum(
+            1 for row in gateway_rows if row.get("result") == "KHÔNG ĐẠT"
         )
 
         # --- alert summary ---
@@ -852,6 +886,10 @@ class MonitorPipeline:
                     sum(s.downtime_seconds for s in self.ping_tracker.stats().values()), 3
                 ),
                 "reconnects": 0,
+                "gateways_passed": len(gateway_rows) - gateways_failed,
+                "gateways_failed": gateways_failed,
+                "result": overall.get("result", ""),
+                "result_reason": overall.get("result_reason", ""),
             }
         )
         if extra:

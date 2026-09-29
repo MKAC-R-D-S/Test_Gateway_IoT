@@ -66,7 +66,8 @@ Mỗi lần chạy tạo `data/<YYYYMMDD_HHMMSS>_<suffix>/`:
 | `reports/correlation_summary.csv` | Tương quan MQTT ↔ ping theo window 60 s (phát hiện "mạng vẫn tốt mà mất dữ liệu"). |
 | `reports/mqtt_silence.csv` | Các window im lặng liên tiếp (nghi ngờ mất dữ liệu). |
 | `reports/alerts_summary.csv` | Đếm cảnh báo theo loại/mức. |
-| `reports/run_summary.csv` | Chốt 1 dòng: tổng bản tin, tỉ lệ thiếu, số reconnect, downtime, thời lượng. |
+| `reports/run_summary.csv` | Chốt 1 dòng: tổng bản tin, tỉ lệ thiếu, số reconnect, downtime, thời lượng, **`gateways_passed` / `gateways_failed` / `result` / `result_reason`** (xem §4 “Kết quả ĐẠT / KHÔNG ĐẠT”). |
+| `reports/gateway_result.csv` | **Kết quả ĐẠT / KHÔNG ĐẠT** — 1 dòng mỗi gateway + 1 dòng **TỔNG** ở cuối file; mỗi tiêu chí 1 cột `PASS` / `FAIL` / `N/A` (29 cột). Xem §4. |
 | `reports/focused_node_summary.csv` | **Node trọng tâm**: 1 dòng TỔNG + 1 dòng mỗi gateway — bắt hụt / bắn hụt, kèm **kiểu ngắt quãng** (`gap_runs`, `gap_largest`, `gap_pattern`). Chỉ sinh khi có node trọng tâm (§4 “Node trọng tâm”). |
 | `reports/focused_node_missing.csv` | Node trọng tâm: từng khoảng SEQ liên tiếp mà gateway không publish (bắt hụt), kèm mốc thời gian. |
 | `reports/focused_node_late.csv` | Node trọng tâm: từng lần publish bị trễ (bắn hụt) — nặng nhất trước, kèm `delay_seconds`. |
@@ -98,6 +99,12 @@ thống kê) — GUI khoá form trong lúc chạy.
 | `focused_node_enabled` | `false` | Bật theo dõi node trọng tâm ngay từ đầu phiên (không cần thao tác GUI). |
 | `focused_node_late_seconds` | `30` | Ngưỡng “bắn hụt”: `received_at − gateway_timestamp` vượt ngưỡng này thì bị coi là publish trễ. |
 | `focused_node_detail_limit` | `200` | Số ca trễ chi tiết giữ lại **mỗi gateway** trong `focused_node_late.csv`. |
+| `min_packets_for_rate` | `50` | **Cỡ mẫu tối thiểu** để chấm các tiêu chí theo tỉ lệ (độ phủ, ping, im lặng, bắn hụt). Dưới ngưỡng này tiêu chí ghi `N/A` thay vì `FAIL` (§4). |
+| `criteria_min_coverage_percent` | `95.0` | Tiêu chí **Độ phủ bản tin**: cho phép hụt tối đa `100 − giá trị này` (%). |
+| `criteria_min_ping_ok_percent` | `90.0` | Tiêu chí **Tỉ lệ ping**: ping OK tối thiểu (%). |
+| `criteria_max_downtime_seconds` | `300.0` | Tiêu chí **Thời gian mất kết nối**: tổng thời gian ping fail tối đa (giây). |
+| `criteria_max_silence_percent` | `2.0` | Tiêu chí **Ổn định MQTT**: % window MQTT im lặng tối đa. |
+| `criteria_max_late_percent` | `5.0` | Tiêu chí **Bắn hụt**: % lần publish trễ tối đa (chỉ áp dụng khi có node trọng tâm). |
 | `rotation` | `daily` | Đổi sang `hourly` nếu lưu lượng rất cao. |
 
 ## 4. Ý nghĩa các chỉ số
@@ -296,6 +303,95 @@ chỉ tính lại khi xuất báo cáo / theo chu kỳ, **không** tính realtim
 - Bộ đếm dùng chung `packet_merge_window_seconds`; tắt gộp bản tin sẽ làm số
   “bắn hụt” đếm quá (mỗi lần publish lặp tính là một lần trễ).
 
+### Kết quả ĐẠT / KHÔNG ĐẠT theo từng tiêu chí
+
+Trang *MQTT ↔ Ping* (§4) trả lời câu hỏi **“ping và MQTT có đồng ý với nhau
+không”**. Nó **không** trả lời câu hỏi mà người test thực sự cần:
+
+> Gateway này **có đạt** không? Đạt/không đạt **vì tiêu chí nào**?
+
+Vì vậy tool có thêm `analytics/gateway_result.py` → chốt thành
+`reports/gateway_result.csv`: **1 dòng mỗi gateway**, mỗi tiêu chí **1 cột** nhận
+`PASS` / `FAIL` / `N/A`, cộng **1 dòng TỔNG** ở cuối file.
+
+**3 mức, không phải 2.** `N/A` nghĩa là **không đủ dữ liệu để chấm** (chưa ping
+lần nào, chưa bật node trọng tâm, dưới `min_packets_for_rate`) — **khác hẳn**
+`FAIL` (“đã đo được và không đạt”). Gộp `N/A` vào `FAIL` sẽ báo hỏng oan những
+gateway chỉ đơn giản là chưa có số liệu.
+
+**7 tiêu chí:**
+
+| # | Cột | Tên | Đạt khi | Nguồn số liệu |
+|---|---|---|---|---|
+| 1 | `c_valid` | Có dữ liệu | gateway publish ≥ 1 bản tin | `mqtt_data_*.csv` |
+| 2 | `c_coverage` | Độ phủ bản tin | hụt ≤ `100 − criteria_min_coverage_percent` (%) | `packets_published` / `packets_expected` |
+| 3 | `c_link` | Kết nối MQTT | `verdict` là `MQTT_OK` hoặc `PING_BLOCKED` | `correlation_summary.csv` |
+| 4 | `c_ping` | Tỉ lệ ping | ping OK ≥ `criteria_min_ping_ok_percent` (%) | `ping_summary.csv` |
+| 5 | `c_downtime` | Thời gian mất kết nối | tổng thời gian ping fail ≤ `criteria_max_downtime_seconds` | `ping_summary.csv` |
+| 6 | `c_stable` | Ổn định MQTT | % window im lặng ≤ `criteria_max_silence_percent` | `mqtt_silence.csv` |
+| 7 | `c_late` | Bắn hụt (gửi trễ) | % lần publish trễ ≤ `criteria_max_late_percent` | `focused_node_summary.csv` (cần node trọng tâm) |
+
+Tiêu chí **2** dùng **mẫu số riêng của từng gateway** (`packets_expected`), không
+phải mẫu số chung của cả cụm: mẫu số chỉ cộng các **node mà chính gateway đó ĐÃ
+nghe được**. Gateway nằm ngoài tầm sóng của một node **không** bị trừ điểm vì
+không publish bản tin của node đó — nếu lấy mẫu số cả cụm thì mọi gateway đều bị
+kết luận “hụt” một cách vô căn cứ. Vì `packets_expected` là mẫu số **riêng từng
+gateway**, dòng TỔNG **không** cộng cột này và để trống.
+
+**Tiêu chí 3 — `PING_BLOCKED` là ĐẠT, `PARTIAL` là KHÔNG ĐẠT.**
+
+`PING_BLOCKED` = ping **DOWN** nhưng MQTT vẫn **ACTIVE** — tức ICMP bị chặn (tường
+lửa/ISP chặn), còn đường MQTT vẫn chạy bình thường. Đây **không phải** lỗi
+gateway nên được tính **PASS** (thực tế đã đo: 3 gateway với ~620 000 bản tin,
+toàn bộ window đều `PING_BLOCKED`, và chúng thực sự hoạt động tốt).
+
+`PARTIAL` là verdict của `analytics/correlation.py` khi **không** có kiểu bất
+thường nào chiếm ≥ 70 % số window đáng ngờ — nghĩa là **trộn lẫn** ping-blocked
+với mất link / gateway im lặng thật ⇒ có **bằng chứng mất kết nối thật** nên tính
+**FAIL**. Mức độ nặng/nhẹ của ca này do tiêu chí **4** và **5** chấm cụ thể bằng
+số, không chấm bằng nhãn verdict.
+
+**Tổng hợp — tất cả phải đạt.** Một gateway được `ĐẠT` **chỉ khi** không tiêu chí
+nào `FAIL` (`N/A` không cản). Ngược lại là `KHÔNG ĐẠT`, và cột `result_reason` liệt
+kê **từng tiêu chí hỏng kèm số thực tế so với ngưỡng**, ví dụ:
+
+```
+Độ phủ bản tin: hụt 6.76% (cho phép ≤ 5.00%);
+Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%);
+Thời gian mất kết nối: tổng 2 lần ping fail 24461.0s (cho phép ≤ 300.0s)
+```
+
+Ngoài ra file còn có các cột số liệu thô để tự kiểm chứng:
+`mqtt_packets`, `packets_published`, `packets_expected`, `coverage_percent`,
+`missed_catch_percent`, `ping_total`, `ping_success_rate_percent`,
+`downtime_events`, `downtime_seconds`, `windows_total`, `silence_windows`,
+`silence_percent`, `verdict`, `late_percent`, và 3 cột đếm
+`criteria_passed` / `criteria_failed` / `criteria_na`.
+
+**Dòng TỔNG** (luôn ở **cuối** file, `gateway_uid = TỔNG`):
+
+- Cộng các bộ đếm: bản tin, ping, downtime, window im lặng.
+- **Tỉ lệ** ping và bắn hụt tính theo **bình quân gia quyền** (theo `ping_total` và
+  `packets_published`) — không lấy trung bình cộng các gateway, vì gateway có ít
+  mẫu sẽ kéo lệch kết quả.
+- Mỗi **tiêu chí**: `FAIL` nếu **bất kỳ** gateway nào `FAIL`; `PASS` nếu có gateway
+  `PASS`; còn lại `N/A`.
+- `result` = `KHÔNG ĐẠT` nếu **bất kỳ** gateway nào không đạt; `result_reason` nêu
+  số gateway hỏng và tên (tối đa 5 UID, phần còn lại rút gọn bằng `…`).
+- Không có gateway nào để chấm → 1 dòng TỔNG với mọi tiêu chí `N/A` và
+  `result_reason = "Không có gateway nào để đánh giá"`.
+
+Hai file này được chốt cùng lúc với mọi báo cáo khác (kể cả khi dừng bằng Ctrl+C),
+và **cũng** điền 4 cột vào `reports/run_summary.csv`: `gateways_passed`,
+`gateways_failed`, `result`, `result_reason` — nên xem nhanh 1 dòng là biết cả
+phiên đạt hay không.
+
+> **Giới hạn:** tool **không** phân biệt được “gateway không thu được sóng” với
+> “node không phát”. Tiêu chí 1–2 đo phía **MQTT nhận được**, nên một gateway bị
+> mất mạng cả tiếng sẽ hiện độ phủ rất thấp — đối chiếu thêm tiêu chí 4/5 (ping,
+> downtime) và cột `gap_pattern` (§4 “Node trọng tâm”) để biết đó là **mất link**
+> hay **lỗi thu sóng**.
+
 ## 5. Ràng buộc thiết kế (vì sao tool "chịu" được 3–4 ngày)
 
 1. **CSV là source of truth**, GUI chỉ là lớp xem. Đóng cửa sổ không làm mất dữ liệu.
@@ -339,6 +435,7 @@ cần broker MQTT và tự dọn thư mục tạm sau khi xong.
 python tests/smoke_test.py
 
 # 2) Unit test (pytest) — gồm tests/test_focused_node.py cho bắt hụt / bắn hụt
+#    và tests/test_gateway_result.py cho kết quả ĐẠT / KHÔNG ĐẠT từng tiêu chí
 python -m pytest tests/ -q
 
 # 3) GUI: import mọi module ui/*, dựng MainWindow rồi đóng (offscreen)
@@ -405,7 +502,8 @@ sách gateway) rồi một `QTabWidget` gồm các trang:
 
 | Trang | Nguồn / nội dung |
 |---|---|
-| **Tổng kết** | `meta.json` + `reports/run_summary.csv` — cùng bộ chỉ số đã dùng khi chốt phiên |
+| **Tổng kết** | `meta.json` + `reports/run_summary.csv` — cùng bộ chỉ số đã dùng khi chốt phiên, kèm **KẾT QUẢ PHIÊN** (`result`, `result_reason`, số gateway đạt/không đạt) |
+| **Đạt / Không đạt** | `reports/gateway_result.csv` — **ĐẠT / KHÔNG ĐẠT theo từng tiêu chí**, 1 dòng mỗi gateway + dòng TỔNG, tô màu theo cột `result` (§4) |
 | **Gateway của phiên** | danh sách gateway trong `meta.json` + **tên chốt lúc BẮT ĐẦU phiên** (`gateway_names`, xem ghi chú bên dưới) |
 | **Node** | `reports/node_summary.csv` (§4 “Delivery rate”) |
 | **Ping** | `reports/ping_summary.csv` |
