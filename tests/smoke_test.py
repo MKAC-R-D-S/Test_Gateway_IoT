@@ -1,4 +1,4 @@
-"""Smoke test cho longrun_monitor — chạy được KHÔNG cần mạng, KHÔNG cần GUI.
+"""Smoke test cho Test Gateway IoT — chạy được KHÔNG cần mạng, KHÔNG cần GUI.
 
 Mục đích: bắt lỗi import, sai chữ ký hàm, sai tên cột CSV… chỉ trong vài giây,
 trước khi mang tool ra chạy 3-4 ngày.
@@ -311,10 +311,10 @@ def read_rows(logs, name: str, limit: int = 10000) -> list:
 # ---------------------------------------------------------------------------
 def main() -> int:
     print("=" * 78)
-    print("SMOKE TEST — longrun_monitor (không cần mạng, không cần GUI)")
+    print("SMOKE TEST — Test Gateway IoT (không cần mạng, không cần GUI)")
     print("=" * 78)
 
-    tmp_root = Path(tempfile.mkdtemp(prefix="longrun_smoke_"))
+    tmp_root = Path(tempfile.mkdtemp(prefix="testgw_smoke_"))
     try:
         # --- 1. config store round-trip ------------------------------------
         print("\n[1] ConfigStore: ghi/đọc config.json + devices.json")

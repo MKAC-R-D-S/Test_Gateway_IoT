@@ -1,4 +1,4 @@
-"""Điểm khởi động tool long-run monitor.
+"""Điểm khởi động tool Test Gateway IoT.
 
 Chạy GUI (mặc định):
 
@@ -42,7 +42,7 @@ LOG_DIR = CORE_TOOL_ROOT / "logs"
 # Logging
 # ---------------------------------------------------------------------------
 def setup_logging(level: str = "INFO", to_file: bool = True, console: bool = True) -> None:
-    """Log ra console + file xoay vòng (`logs/longrun_monitor.log`)."""
+    """Log ra console + file xoay vòng (`logs/test_gateway_iot.log`)."""
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
     for handler in list(root.handlers):
@@ -63,7 +63,7 @@ def setup_logging(level: str = "INFO", to_file: bool = True, console: bool = Tru
         try:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             rotating = logging.handlers.RotatingFileHandler(
-                LOG_DIR / "longrun_monitor.log",
+                LOG_DIR / "test_gateway_iot.log",
                 maxBytes=5 * 1024 * 1024,
                 backupCount=5,
                 encoding="utf-8",
@@ -113,7 +113,7 @@ def run_headless(config, devices, hours: float) -> int:
 
     session = runner.start()
     log.info("=" * 78)
-    log.info("LONG-RUN MONITOR — chế độ KHÔNG GUI")
+    log.info("TEST GATEWAY IOT — chế độ KHÔNG GUI")
     log.info("Phiên      : %s", session.run_id)
     log.info("Thư mục    : %s", session.run_dir)
     log.info("Broker     : %s", session.broker)
@@ -302,7 +302,7 @@ def run_gui(config, devices) -> int:
     from ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Long-run Monitor")
+    app.setApplicationName("Test Gateway IoT")
     app.setApplicationVersion(TOOL_VERSION)
 
     window = MainWindow(
@@ -320,7 +320,7 @@ def run_gui(config, devices) -> int:
 # ---------------------------------------------------------------------------
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="longrun_monitor",
+        prog="test_gateway_iot",
         description=(
             "Theo dõi MQTT gateway IoT Type0 trong nhiều ngày: ghi CSV đầy đủ, "
             "phân tích SEQ (uint16), ping song song và chốt báo cáo tổng hợp."
@@ -355,7 +355,7 @@ def main(argv=None) -> int:
     config = store.load_config()
     devices = store.load_devices()
 
-    log.info("Long-run Monitor v%s — cấu hình: %s", TOOL_VERSION, store.config_path)
+    log.info("Test Gateway IoT v%s — cấu hình: %s", TOOL_VERSION, store.config_path)
     log.info("Broker %s:%d | topic %s",
              config.mqtt_host, config.mqtt_port,
              ", ".join(config.effective_subscribe_topics()))
@@ -379,7 +379,7 @@ def main(argv=None) -> int:
     except Exception:  # noqa: BLE001 - hiện lỗi khởi động cho người dùng
         log.exception("Lỗi khởi động GUI")
         print("\nKhông khởi động được GUI. Xem log tại: %s"
-              % (LOG_DIR / "longrun_monitor.log"), file=sys.stderr)
+              % (LOG_DIR / "test_gateway_iot.log"), file=sys.stderr)
         return 1
 
 

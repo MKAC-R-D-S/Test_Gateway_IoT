@@ -1,4 +1,4 @@
-"""Thread-safe CSV writer cho long-run test (3-4 ngày).
+"""Thread-safe CSV writer cho test dài ngày (3-4 ngày).
 
 Đặc điểm bắt buộc:
   - Một writer thread duy nhất ghi ra disk; thread khác chỉ `enqueue()`.

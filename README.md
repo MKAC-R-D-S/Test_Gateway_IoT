@@ -1,11 +1,11 @@
-# longrun_monitor — theo dõi MQTT gateway IoT Type0 trong 3–4 ngày
+# Test Gateway IoT — theo dõi MQTT nhiều gateway IoT Type0 trong 3–4 ngày
 
 Tool độc lập, **không sửa** source firmware và không sửa các tool khác trong repo.
 Nguồn chân lý về protocol là `docs/MQTT_PROTOCOL_ANALYSIS.md` (đọc trực tiếp từ
 firmware `../IoT_Type0_Gateway/src`).
 
 ```
-longrun_monitor/
+Test_Gateway_IoT/
 ├── main.py                  # entry point: GUI (mặc định) hoặc --headless
 ├── run.ps1                  # chạy nhanh trên Windows
 ├── requirements.txt

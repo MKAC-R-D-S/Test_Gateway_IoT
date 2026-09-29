@@ -1,4 +1,4 @@
-"""Cấu hình & thiết bị của tool long-run monitor.
+"""Cấu hình & thiết bị của tool Test Gateway IoT.
 
 Files (đều nằm trong `config/` của tool):
   - `config.json`  : cấu hình broker + tham số test (tự sinh nếu chưa có)

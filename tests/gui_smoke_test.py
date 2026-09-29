@@ -1,4 +1,4 @@
-"""Smoke test GUI (PyQt5) cho longrun_monitor — chạy headless (offscreen).
+"""Smoke test GUI (PyQt5) cho Test Gateway IoT — chạy headless (offscreen).
 
 Mục đích: bắt lỗi import / sai tên widget / sai chữ ký signal TRƯỚC khi mang tool
 ra chạy 3-4 ngày trên máy trạm. Không cần mạng, không cần MQTT broker.
@@ -60,7 +60,7 @@ def _focus_record(gateway: str, seq: int, received_at: str, gateway_timestamp: s
 
 def main() -> int:
     print("=" * 78)
-    print("GUI SMOKE TEST — longrun_monitor (offscreen, không cần mạng)")
+    print("GUI SMOKE TEST — Test Gateway IoT (offscreen, không cần mạng)")
     print("=" * 78)
 
     try:
@@ -72,7 +72,7 @@ def main() -> int:
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
 
-    tmp_root = Path(tempfile.mkdtemp(prefix="longrun_gui_"))
+    tmp_root = Path(tempfile.mkdtemp(prefix="testgw_gui_"))
 
     # --- 1. import toàn bộ module UI --------------------------------------
     print("\n[1] Import các module UI")

@@ -1,4 +1,4 @@
-"""Kiểu dữ liệu dùng chung của tool long-run monitor."""
+"""Kiểu dữ liệu dùng chung của tool Test Gateway IoT."""
 
 from __future__ import annotations
 

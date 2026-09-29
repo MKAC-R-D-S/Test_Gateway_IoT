@@ -3,7 +3,7 @@
 Ba nhóm cảnh báo:
 
 1. **Node im lặng** — node đã từng gửi nhưng không gửi trong `node_silent_seconds`
-   (mặc định 600 s). Đây là cảnh báo quan trọng nhất của long-run test: node chết
+   (mặc định 600 s). Đây là cảnh báo quan trọng nhất của test dài ngày: node chết
    pin / mất LoRa / gateway bỏ sót đều biểu hiện giống nhau ở phía MQTT.
 2. **Tỷ lệ mất SEQ cao** — node có `missing / (packets + missing)` vượt ngưỡng
    trong cửa sổ quan sát.

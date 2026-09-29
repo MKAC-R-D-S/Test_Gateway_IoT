@@ -1,6 +1,6 @@
 """Đối chiếu MQTT ↔ ping để phân biệt lỗi ở gateway hay ở đường mạng.
 
-Mục tiêu của long-run test: trả lời câu hỏi
+Mục tiêu của test dài ngày: trả lời câu hỏi
   "Gateway mất/không gửi dữ liệu là do gateway chết, hay do đường mạng/điện?"
 
 Cách làm: chia trục thời gian thành các **window** cố định (mặc định 60 s — bằng

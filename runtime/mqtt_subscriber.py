@@ -1,4 +1,4 @@
-"""MQTT subscriber cho long-run test (paho-mqtt v2).
+"""MQTT subscriber cho Test Gateway IoT (paho-mqtt v2).
 
 Đặc điểm bắt buộc cho test 3-4 ngày KHÔNG giám sát:
 
@@ -100,7 +100,7 @@ class MqttSubscriber:
         self.topics = list(topics or ["node/#"])
         self.reconnect_min = max(1, int(reconnect_min))
         self.reconnect_max = max(self.reconnect_min, int(reconnect_max))
-        self.client_id = client_id or ("longrun_%d" % int(time.time()))
+        self.client_id = client_id or ("testgw_%d" % int(time.time()))
 
         self.queue: "queue.Queue[RawMessage]" = queue.Queue(maxsize=max(1000, queue_max))
         self.stats = MqttStats()

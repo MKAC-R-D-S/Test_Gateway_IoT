@@ -1,4 +1,4 @@
-"""Tầng GUI (PyQt5) của long-run monitor.
+"""Tầng GUI (PyQt5) của Test Gateway IoT.
 
 Nguyên tắc thiết kế (bắt buộc cho test 3-4 ngày chạy liên tục):
 

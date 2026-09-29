@@ -1,7 +1,7 @@
 # MQTT_PROTOCOL_ANALYSIS.md
 
 Phân tích protocol MQTT THỰC TẾ của firmware `IoT_Type0_Gateway` (ESP32-S3),
-làm cơ sở cho tool `longrun_monitor`.
+làm cơ sở cho tool `Test_Gateway_IoT`.
 
 > **Nguồn dữ liệu duy nhất = source firmware** (`../IoT_Type0_Gateway/src/*`).
 > Mọi kết luận dưới đây đều kèm file:line. Phần nào source không định nghĩa rõ
@@ -26,14 +26,14 @@ Hai broker độc lập trong firmware:
 
 1. **Broker chính** (`mqtt_host`) → dữ liệu node (`node/#`) + log gateway (`<model>/<uuid>/log`).
 2. **Broker ThingsBoard** (`tb_host`, mặc định 1884) → quản trị từ xa, telemetry 60 s,
-   attribute, RPC, OTA, provision. **Tool long-run KHÔNG dùng broker này** (khác
+   attribute, RPC, OTA, provision. **Tool Test Gateway IoT KHÔNG dùng broker này** (khác
    giao thức/topic, chỉ để quản trị).
 
 Giá trị thực tế trong các tool hiện có (factory): host `45.117.170.179`,
 port `1883` (`gateway_fct_test/factory_config.json`), riêng `node_forward`/`node_log`
 dùng port `1885`.
 
-> **UNKNOWN – NEED USER CONFIRMATION**: port chính thức dùng cho long-run test
+> **UNKNOWN – NEED USER CONFIRMATION**: port chính thức dùng cho test gateway IoT
 > (1883 hay 1885) và tài khoản/password production.
 
 ---
@@ -407,7 +407,7 @@ cờ `crc_ok`, và không chứa CRC của payload JSON.**
 
 | # | Nội dung | Trạng thái |
 |---|---|---|
-| A1 | Broker host/port/credential cho long-run test | UNKNOWN – NEED USER CONFIRMATION |
+| A1 | Broker host/port/credential cho test gateway IoT | UNKNOWN – NEED USER CONFIRMATION |
 | A2 | Node reset SEQ về 0 hay wrap liên tục sau reboot | UNKNOWN – NEED USER CONFIRMATION |
 | A3 | Chu kỳ gửi (`send_interval`) mong đợi của từng node để tính "missing do mất packet" so với "missing do node ngừng gửi" | UNKNOWN – NEED USER CONFIRMATION |
 | A4 | Ngưỡng phân biệt OUT_OF_ORDER vs SEQ_RESET (mặc định tool: khoảng cách ≤ 16 coi là out-of-order trước) | Configurable, mặc định theo tool |

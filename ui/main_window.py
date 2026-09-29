@@ -108,7 +108,7 @@ class BrokerCheckWorker(QThread):
 
 # ---------------------------------------------------------------------------
 class MainWindow(QMainWindow):
-    """Cửa sổ chính của tool long-run monitor."""
+    """Cửa sổ chính của tool Test Gateway IoT."""
 
     STATUS_REFRESH_MS = 1000
 
@@ -133,7 +133,7 @@ class MainWindow(QMainWindow):
         self._ping_refresh_tick = 0
 
         self.setWindowTitle(
-            "Long-run Monitor — IoT Type0 Gateway%s"
+            "Test Gateway IoT — IoT Type0 Gateway%s"
             % (" (v%s)" % tool_version if tool_version else "")
         )
         self.resize(1500, 950)
@@ -580,7 +580,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Giới thiệu",
-            "Long-run Monitor — theo dõi MQTT gateway IoT Type0 trong 3-4 ngày.\n\n"
+            "Test Gateway IoT — theo dõi MQTT gateway IoT Type0 trong 3-4 ngày.\n\n"
             "• Dữ liệu thô được ghi CSV liên tục, có thể tra cứu lại sau.\n"
             "• Phân tích SEQ (uint16) để phát hiện mất gói / trùng / sai thứ tự.\n"
             "• Ping gateway song song để tách lỗi mạng khỏi lỗi thiết bị.\n"

@@ -82,7 +82,7 @@ class ConfigTab(QWidget):
         self.fields["mqtt_password"] = QLineEdit()
         self.fields["mqtt_password"].setEchoMode(QLineEdit.Password)
         self.fields["mqtt_client_id"] = QLineEdit()
-        self.fields["mqtt_client_id"].setPlaceholderText("Để trống → tự sinh (longrun_<timestamp>)")
+        self.fields["mqtt_client_id"].setPlaceholderText("Để trống → tự sinh (testgw_<timestamp>)")
         form.addRow("Host *", self.fields["mqtt_host"])
         form.addRow("Port *", self.fields["mqtt_port"])
         form.addRow("Username", self.fields["mqtt_username"])

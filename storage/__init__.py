@@ -1,4 +1,4 @@
-"""Storage của tool long-run monitor."""
+"""Storage của tool Test Gateway IoT."""
 
 from .csv_writer import CsvSink, LogManager
 from .reader import SearchQuery, SearchResult, dataset_overview, search_mqtt

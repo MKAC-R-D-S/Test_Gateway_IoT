@@ -1,4 +1,4 @@
-# Long-run Monitor - script chay nhanh tren Windows PowerShell
+# Test Gateway IoT - script chay nhanh tren Windows PowerShell
 #
 #   .\run.ps1                 -> mo GUI
 #   .\run.ps1 -Headless       -> chay khong GUI toi khi Ctrl+C
