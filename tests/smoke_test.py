@@ -933,10 +933,10 @@ def main() -> int:
                     if row.get(key) not in allowed
                 ]
                 check(not bad,
-                      "mọi tiêu chí đều là PASS / FAIL / N/A (7 tiêu chí)",
+                      "mọi tiêu chí đều là PASS / FAIL / N/A (6 tiêu chí)",
                       "giá trị lạ: %s" % bad[:5])
-                check(len(criteria_cols) == 7,
-                      "gateway_result có đúng 7 cột tiêu chí",
+                check(len(criteria_cols) == 6,
+                      "gateway_result có đúng 6 cột tiêu chí",
                       "có %d: %s" % (len(criteria_cols), criteria_cols))
                 per_gateway = [r for r in body if r.get("gateway_uid") != "TỔNG"]
                 total = body[-1]

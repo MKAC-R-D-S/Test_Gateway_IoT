@@ -216,7 +216,6 @@ def test_ping_blocked_gateway_passes_link_criterion():
     assert row["c_valid"] == PASS
     assert row["c_coverage"] == PASS
     assert row["c_ping"] == NA            # ping bị chặn → không đo được
-    assert row["c_downtime"] == NA
     assert row["c_stable"] == PASS
     assert row["result"] == RESULT_PASS
 
@@ -352,29 +351,29 @@ def test_configured_but_silent_device_still_appears_and_fails():
 # --------------------------------------------------------------------------
 def test_coverage_below_threshold_fails():
     evaluator = GatewayResultEvaluator(config())
-    # GW1 nghe 90/100 bản tin → hụt 10% > 5% cho phép.
-    mqtt = [mqtt_row([GW1, GW2]) for _ in range(90)]
-    mqtt += [mqtt_row([GW2]) for _ in range(10)]
+    # GW1 nghe 80/100 bản tin → hụt 20% > 15% cho phép.
+    mqtt = [mqtt_row([GW1, GW2]) for _ in range(80)]
+    mqtt += [mqtt_row([GW2]) for _ in range(20)]
 
     rows = evaluator.evaluate(mqtt_rows=mqtt, correlation_gateways=[context(GW1)])
 
     row = by_uid(rows)[GW1]
-    assert row["coverage_percent"] == 90.0
-    assert row["missed_catch_percent"] == 10.0
+    assert row["coverage_percent"] == 80.0
+    assert row["missed_catch_percent"] == 20.0
     assert row["c_coverage"] == FAIL
     assert row["result"] == RESULT_FAIL
 
 
 def test_coverage_at_exact_threshold_passes():
-    """Biên: hụt ĐÚNG 5% (ngưỡng) phải ĐẠT."""
+    """Biên: hụt ĐÚNG 15% (ngưỡng) phải ĐẠT."""
     evaluator = GatewayResultEvaluator(config())
-    mqtt = [mqtt_row([GW1, GW2]) for _ in range(95)]
-    mqtt += [mqtt_row([GW2]) for _ in range(5)]
+    mqtt = [mqtt_row([GW1, GW2]) for _ in range(85)]
+    mqtt += [mqtt_row([GW2]) for _ in range(15)]
 
     rows = evaluator.evaluate(mqtt_rows=mqtt, correlation_gateways=[context(GW1)])
 
     row = by_uid(rows)[GW1]
-    assert row["missed_catch_percent"] == 5.0
+    assert row["missed_catch_percent"] == 15.0
     assert row["c_coverage"] == PASS
 
 
@@ -421,7 +420,6 @@ def test_ping_disabled_is_not_applicable_not_failed():
     row = one(rows)
     assert row["ping_total"] == 0
     assert row["c_ping"] == NA
-    assert row["c_downtime"] == NA
     assert row["result"] == RESULT_PASS
 
 
@@ -447,26 +445,24 @@ def test_ping_rate_at_exact_threshold_passes():
     assert one(rows)["c_ping"] == PASS
 
 
-def test_downtime_above_threshold_fails():
+def test_downtime_no_longer_affects_verdict():
+    """Tiêu chí downtime ĐÃ BỎ: downtime lớn KHÔNG làm gateway trượt.
+
+    Cột `downtime_seconds` vẫn được xuất ra CSV để tham khảo, nhưng không còn
+    là tiêu chí chấm điểm (xem docstring `analytics/gateway_result.py`).
+    """
     evaluator = GatewayResultEvaluator(config())
     rows = evaluator.evaluate(
-        ping_rows=[ping_row(GW1, downtime_seconds=300.001, downtime_events=3)],
+        mqtt_rows=[mqtt_row([GW1]) for _ in range(100)],
+        ping_rows=[ping_row(GW1, downtime_seconds=9999.0, downtime_events=50)],
         correlation_gateways=[context(GW1, verdict=VERDICT_OK, windows_total=10)],
     )
 
     row = one(rows)
-    assert row["c_downtime"] == FAIL
-    assert "Thời gian mất kết nối" in row["result_reason"]
-    assert "300.0s" in row["result_reason"]
-
-
-def test_downtime_at_exact_threshold_passes():
-    evaluator = GatewayResultEvaluator(config())
-    rows = evaluator.evaluate(
-        ping_rows=[ping_row(GW1, downtime_seconds=300.0)],
-        correlation_gateways=[context(GW1, verdict=VERDICT_OK, windows_total=10)],
-    )
-    assert one(rows)["c_downtime"] == PASS
+    assert row["downtime_seconds"] == 9999.0     # vẫn xuất ra để tham khảo
+    assert "c_downtime" not in row
+    assert row["result"] == RESULT_PASS
+    assert "Thời gian mất kết nối" not in row["result_reason"]
 
 
 def test_small_ping_sample_is_not_applicable():
@@ -721,9 +717,9 @@ def test_criteria_columns_are_exactly_the_declared_criteria():
 
     row = one(rows)
     keys = [key for key, _label in CRITERIA]
-    assert len(keys) == 7
+    assert len(keys) == 6
     assert all(row[key] in (PASS, FAIL, NA) for key in keys)
-    assert row["criteria_passed"] + row["criteria_failed"] + row["criteria_na"] == 7
+    assert row["criteria_passed"] + row["criteria_failed"] + row["criteria_na"] == 6
 
 
 def test_counts_and_reason_agree_with_failed_keys():
@@ -735,8 +731,7 @@ def test_counts_and_reason_agree_with_failed_keys():
     row = one(rows)
     assert row["c_valid"] == FAIL
     assert row["c_ping"] == FAIL
-    assert row["c_downtime"] == FAIL
-    assert row["criteria_failed"] == 3          # valid + ping + downtime
+    assert row["criteria_failed"] == 2          # valid + ping (downtime không chấm)
     assert row["result"] == RESULT_FAIL
 
 

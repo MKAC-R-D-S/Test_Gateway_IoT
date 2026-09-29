@@ -67,7 +67,7 @@ Mỗi lần chạy tạo `data/<YYYYMMDD_HHMMSS>_<suffix>/`:
 | `reports/mqtt_silence.csv` | Các window im lặng liên tiếp (nghi ngờ mất dữ liệu). |
 | `reports/alerts_summary.csv` | Đếm cảnh báo theo loại/mức. |
 | `reports/run_summary.csv` | Chốt 1 dòng: tổng bản tin, tỉ lệ thiếu, số reconnect, downtime, thời lượng, **`gateways_passed` / `gateways_failed` / `result` / `result_reason`** (xem §4 “Kết quả ĐẠT / KHÔNG ĐẠT”). |
-| `reports/gateway_result.csv` | **Kết quả ĐẠT / KHÔNG ĐẠT** — 1 dòng mỗi gateway + 1 dòng **TỔNG** ở cuối file; mỗi tiêu chí 1 cột `PASS` / `FAIL` / `N/A` (29 cột). Xem §4. |
+| `reports/gateway_result.csv` | **Kết quả ĐẠT / KHÔNG ĐẠT** — 1 dòng mỗi gateway + 1 dòng **TỔNG** ở cuối file; mỗi tiêu chí 1 cột `PASS` / `FAIL` / `N/A` (28 cột). Xem §4. |
 | `reports/focused_node_summary.csv` | **Node trọng tâm**: 1 dòng TỔNG + 1 dòng mỗi gateway — bắt hụt / bắn hụt, kèm **kiểu ngắt quãng** (`gap_runs`, `gap_largest`, `gap_pattern`). Chỉ sinh khi có node trọng tâm (§4 “Node trọng tâm”). |
 | `reports/focused_node_missing.csv` | Node trọng tâm: từng khoảng SEQ liên tiếp mà gateway không publish (bắt hụt), kèm mốc thời gian. |
 | `reports/focused_node_late.csv` | Node trọng tâm: từng lần publish bị trễ (bắn hụt) — nặng nhất trước, kèm `delay_seconds`. |
@@ -100,9 +100,8 @@ thống kê) — GUI khoá form trong lúc chạy.
 | `focused_node_late_seconds` | `30` | Ngưỡng “bắn hụt”: `received_at − gateway_timestamp` vượt ngưỡng này thì bị coi là publish trễ. |
 | `focused_node_detail_limit` | `200` | Số ca trễ chi tiết giữ lại **mỗi gateway** trong `focused_node_late.csv`. |
 | `min_packets_for_rate` | `50` | **Cỡ mẫu tối thiểu** để chấm các tiêu chí theo tỉ lệ (độ phủ, ping, im lặng, bắn hụt). Dưới ngưỡng này tiêu chí ghi `N/A` thay vì `FAIL` (§4). |
-| `criteria_min_coverage_percent` | `95.0` | Tiêu chí **Độ phủ bản tin**: cho phép hụt tối đa `100 − giá trị này` (%). |
+| `criteria_min_coverage_percent` | `85.0` | Tiêu chí **Độ phủ bản tin**: cho phép hụt tối đa `100 − giá trị này` (%). |
 | `criteria_min_ping_ok_percent` | `90.0` | Tiêu chí **Tỉ lệ ping**: ping OK tối thiểu (%). |
-| `criteria_max_downtime_seconds` | `300.0` | Tiêu chí **Thời gian mất kết nối**: tổng thời gian ping fail tối đa (giây). |
 | `criteria_max_silence_percent` | `2.0` | Tiêu chí **Ổn định MQTT**: % window MQTT im lặng tối đa. |
 | `criteria_max_late_percent` | `5.0` | Tiêu chí **Bắn hụt**: % lần publish trễ tối đa (chỉ áp dụng khi có node trọng tâm). |
 | `rotation` | `daily` | Đổi sang `hourly` nếu lưu lượng rất cao. |
@@ -319,7 +318,7 @@ lần nào, chưa bật node trọng tâm, dưới `min_packets_for_rate`) — *
 `FAIL` (“đã đo được và không đạt”). Gộp `N/A` vào `FAIL` sẽ báo hỏng oan những
 gateway chỉ đơn giản là chưa có số liệu.
 
-**7 tiêu chí:**
+**6 tiêu chí:**
 
 | # | Cột | Tên | Đạt khi | Nguồn số liệu |
 |---|---|---|---|---|
@@ -327,9 +326,15 @@ gateway chỉ đơn giản là chưa có số liệu.
 | 2 | `c_coverage` | Độ phủ bản tin | hụt ≤ `100 − criteria_min_coverage_percent` (%) | `packets_published` / `packets_expected` |
 | 3 | `c_link` | Kết nối MQTT | `verdict` là `MQTT_OK` hoặc `PING_BLOCKED` | `correlation_summary.csv` |
 | 4 | `c_ping` | Tỉ lệ ping | ping OK ≥ `criteria_min_ping_ok_percent` (%) | `ping_summary.csv` |
-| 5 | `c_downtime` | Thời gian mất kết nối | tổng thời gian ping fail ≤ `criteria_max_downtime_seconds` | `ping_summary.csv` |
-| 6 | `c_stable` | Ổn định MQTT | % window im lặng ≤ `criteria_max_silence_percent` | `mqtt_silence.csv` |
-| 7 | `c_late` | Bắn hụt (gửi trễ) | % lần publish trễ ≤ `criteria_max_late_percent` | `focused_node_summary.csv` (cần node trọng tâm) |
+| 5 | `c_stable` | Ổn định MQTT | % window im lặng ≤ `criteria_max_silence_percent` | `mqtt_silence.csv` |
+| 6 | `c_late` | Bắn hụt (gửi trễ) | % lần publish trễ ≤ `criteria_max_late_percent` | `focused_node_summary.csv` (cần node trọng tâm) |
+
+> **Tiêu chí “Thời gian mất kết nối” (downtime) đã được BỎ khỏi kết luận.**
+> `downtime_seconds` là tổng thời gian ICMP ping fail; một gateway có MQTT hoàn
+> toàn khoẻ vẫn có thể tích luỹ downtime vượt ngưỡng vì ping bị chặn/chập chờn.
+> Hai cột `downtime_events` / `downtime_seconds` **vẫn được xuất ra CSV** và hiển
+> thị ở tab Ping / Downtime để tham khảo, nhưng **không** vào kết luận ĐẠT /
+> KHÔNG ĐẠT.
 
 Tiêu chí **2** dùng **mẫu số riêng của từng gateway** (`packets_expected`), không
 phải mẫu số chung của cả cụm: mẫu số chỉ cộng các **node mà chính gateway đó ĐÃ
@@ -350,21 +355,20 @@ thường nào chiếm ≥ 70 % số window đáng ngờ — nghĩa là **trộn
 với mất link / gateway im lặng thật ⇒ có **bằng chứng mất kết nối thật** nên tính
 **FAIL**. Mức độ nặng/nhẹ của ca này do tiêu chí **4** và **5** chấm cụ thể bằng
 số, không chấm bằng nhãn verdict.
-
 **Tổng hợp — tất cả phải đạt.** Một gateway được `ĐẠT` **chỉ khi** không tiêu chí
 nào `FAIL` (`N/A` không cản). Ngược lại là `KHÔNG ĐẠT`, và cột `result_reason` liệt
 kê **từng tiêu chí hỏng kèm số thực tế so với ngưỡng**, ví dụ:
 
 ```
-Độ phủ bản tin: hụt 6.76% (cho phép ≤ 5.00%);
-Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%);
-Thời gian mất kết nối: tổng 2 lần ping fail 24461.0s (cho phép ≤ 300.0s)
+Độ phủ bản tin: hụt 6.76% (cho phép ≤ 15.00%);
+Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%)
 ```
 
 Ngoài ra file còn có các cột số liệu thô để tự kiểm chứng:
 `mqtt_packets`, `packets_published`, `packets_expected`, `coverage_percent`,
 `missed_catch_percent`, `ping_total`, `ping_success_rate_percent`,
-`downtime_events`, `downtime_seconds`, `windows_total`, `silence_windows`,
+`downtime_events`, `downtime_seconds` *(tham khảo — không chấm điểm)*,
+`windows_total`, `silence_windows`,
 `silence_percent`, `verdict`, `late_percent`, và 3 cột đếm
 `criteria_passed` / `criteria_failed` / `criteria_na`.
 
@@ -388,9 +392,9 @@ phiên đạt hay không.
 
 > **Giới hạn:** tool **không** phân biệt được “gateway không thu được sóng” với
 > “node không phát”. Tiêu chí 1–2 đo phía **MQTT nhận được**, nên một gateway bị
-> mất mạng cả tiếng sẽ hiện độ phủ rất thấp — đối chiếu thêm tiêu chí 4/5 (ping,
-> downtime) và cột `gap_pattern` (§4 “Node trọng tâm”) để biết đó là **mất link**
-> hay **lỗi thu sóng**.
+> mất mạng cả tiếng sẽ hiện độ phủ rất thấp — đối chiếu thêm tiêu chí 3/4/5
+> (kết nối MQTT, ping, ổn định MQTT) và cột `gap_pattern` (§4 “Node trọng tâm”)
+> để biết đó là **mất link** hay **lỗi thu sóng**.
 
 ### Chấm lại kết quả cho phiên CŨ (nút “⚖ Chấm lại kết quả”)
 

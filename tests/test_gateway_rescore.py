@@ -309,7 +309,6 @@ def test_rescore_marks_missing_session_params_and_warns(tmp_path):
 def test_rescore_reports_params_from_session_when_present(tmp_path):
     run_dir = build_run(tmp_path)
     snapshot(run_dir, min_coverage_percent=95.0)
-
     result = rescore_run(run_dir, SimpleNamespace(),
                          session_params={"min_coverage_percent": 95.0})
 
@@ -464,7 +463,6 @@ def test_scoring_params_snapshot_reads_criteria_prefix():
     config = SimpleNamespace(
         criteria_min_coverage_percent=90.0,
         criteria_min_ping_ok_percent=80.0,
-        criteria_max_downtime_seconds=60.0,
         criteria_max_silence_percent=1.0,
         criteria_max_late_percent=3.0,
         criteria_min_packets_for_rate=10,
@@ -485,10 +483,10 @@ def test_scoring_params_snapshot_reads_criteria_prefix():
 def test_scoring_params_snapshot_falls_back_to_defaults():
     snapshot = scoring_params_snapshot(SimpleNamespace())
 
-    assert snapshot["min_coverage_percent"] == 95.0
+    assert snapshot["min_coverage_percent"] == 85.0
     assert snapshot["ping_down_threshold"] == 2
     assert set(snapshot) == {
-        "min_coverage_percent", "min_ping_ok_percent", "max_downtime_seconds",
+        "min_coverage_percent", "min_ping_ok_percent",
         "max_silence_percent", "max_late_percent", "min_packets_for_rate",
         "ping_down_threshold", "correlation_window_seconds",
         "silent_window_threshold",
@@ -514,8 +512,13 @@ def test_scoring_params_ignores_blank_values():
     assert not hasattr(params, "ping_down_threshold")
 
 
-def test_ping_down_threshold_changes_downtime_criterion(tmp_path):
-    """Ngưỡng ping phải được dùng: 1 fail đơn lẻ là downtime khi ngưỡng = 1."""
+def test_ping_down_threshold_changes_reference_downtime_columns(tmp_path):
+    """Ngưỡng ping phải được dùng cho các CỘT downtime tham khảo.
+
+    Từ khi bỏ tiêu chí downtime, thay đổi này KHÔNG còn làm đổi kết luận — nhưng
+    các cột `downtime_events` / `downtime_seconds` vẫn phải phản ánh đúng ngưỡng
+    để người đọc CSV không bị hiểu nhầm.
+    """
     run_dir = build_run(tmp_path, gateways=(GW1,), ping_total=60, ping_failed=0)
     rows = [ping_log_row(GW1, success=True, index=index) for index in range(60)]
     del rows[30]                        # tạo 1 lần fail đơn lẻ

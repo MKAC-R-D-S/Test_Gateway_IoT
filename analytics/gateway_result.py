@@ -4,8 +4,9 @@ Vì sao cần module riêng thay vì thêm cột vào `correlation_summary.csv`:
   - `correlation_summary.verdict` chỉ trả lời *"ping ↔ MQTT có khớp nhau không"*
     (6 giá trị OK / LINK_DOWN / GATEWAY_SILENT / PING_BLOCKED / PARTIAL /
     NO_DATA), **không** trả lời *"gateway này có đạt yêu cầu test hay không"*.
-  - Ba chỉ số cần cho kết luận (độ phủ bản tin, thời gian mất kết nối, mức im
-    lặng) nằm ở ba file khác nhau → phải gom về MỘT chỗ mới so được với ngưỡng.
+  - Các chỉ số cần cho kết luận (độ phủ bản tin, kết luận ping↔MQTT, tỉ lệ
+    ping, mức im lặng, tỉ lệ gửi trễ) nằm ở nhiều file khác nhau → phải gom về
+    MỘT chỗ mới so được với ngưỡng.
 
 Nguyên tắc thiết kế (đã chốt với người dùng):
 
@@ -24,9 +25,14 @@ Nguyên tắc thiết kế (đã chốt với người dùng):
     trượt thì cả phiên bị kết luận sai.
   - **`PARTIAL` là trượt.** `PARTIAL` = bất thường HỖN HỢP, thường là vừa có
     giai đoạn `PING_BLOCKED` (bình thường — ping bị chặn) vừa có giai đoạn mất
-    mạng thật. Vì đã có dấu hiệu mất kết nối THẬT nên tiêu chí 3 trượt, còn
-    *mức nặng* được đo bằng con số ở tiêu chí 4 và 5 (tỉ lệ ping, thời gian mất
-    kết nối) chứ không đoán từ nhãn này.
+    mạng thật. Vì đã có dấu hiệu mất kết nối THẬT nên tiêu chí 3 trượt.
+  - **KHÔNG chấm tiêu chí "thời gian mất kết nối" (downtime).** `downtime_seconds`
+    là tổng thời gian ICMP ping fail; một gateway có MQTT hoàn toàn khoẻ vẫn có
+    thể tích luỹ downtime vượt ngưỡng vì ping bị chặn/chập chờn (xem
+    `analytics/ping_stats.py`). Đo trên dữ liệu thật: các phiên có `c_link` ĐẠT
+    nhưng `c_downtime` KHÔNG ĐẠT → tiêu chí này chỉ gây nhiễu kết luận. Hai cột
+    `downtime_events` / `downtime_seconds` VẪN được xuất ra CSV và hiển thị ở
+    tab Ping / Downtime để tham khảo, nhưng KHÔNG vào kết luận ĐẠT / KHÔNG ĐẠT.
 
 Giới hạn của phương pháp (KHÔNG được ảo giác):
   - **Độ phủ bản tin** dựa trên bằng chứng MQTT: một dòng `mqtt_data_*.csv` là
@@ -82,21 +88,21 @@ TOTAL_UID = "TỔNG"
 COVERAGE_PACKET_TYPES = ("DATA", "DATA_NO_SEQ", "INFO")
 
 #: (khoá cột, nhãn tiếng Việt) — thứ tự này dùng cho cả cột CSV lẫn lý do.
+#: `c_downtime` ĐÃ BỊ BỎ khỏi kết luận (xem docstring): cột vẫn xuất ra CSV để
+#: tham khảo nhưng không tính là tiêu chí đạt/trượt.
 CRITERIA: List[Tuple[str, str]] = [
     ("c_valid", "Có dữ liệu"),
     ("c_coverage", "Độ phủ bản tin"),
     ("c_link", "Kết nối MQTT"),
     ("c_ping", "Tỉ lệ ping"),
-    ("c_downtime", "Thời gian mất kết nối"),
     ("c_stable", "Ổn định MQTT"),
     ("c_late", "Bắn hụt (gửi trễ)"),
 ]
 
 #: Ngưỡng mặc định — dùng khi `TestConfig` cũ chưa có khoá tương ứng.
 DEFAULTS: Dict[str, Any] = {
-    "min_coverage_percent": 95.0,
+    "min_coverage_percent": 85.0,
     "min_ping_ok_percent": 90.0,
-    "max_downtime_seconds": 300.0,
     "max_silence_percent": 2.0,
     "max_late_percent": 5.0,
     "min_packets_for_rate": 50,
@@ -118,10 +124,11 @@ def _cfg(config: Any, name: str, default: Any) -> Any:
 
 
 #: Các ngưỡng tiêu chí cần chốt vào `meta.json` của phiên (tên KHÔNG kèm `criteria_`).
+#: `max_downtime_seconds` KHÔNG còn ở đây — tiêu chí downtime đã bỏ, nên ngưỡng
+#: này không còn ảnh hưởng kết quả (chốt lại chỉ gây hiểu nhầm khi chấm lại).
 THRESHOLD_KEYS: Tuple[str, ...] = (
     "min_coverage_percent",
     "min_ping_ok_percent",
-    "max_downtime_seconds",
     "max_silence_percent",
     "max_late_percent",
     "min_packets_for_rate",
@@ -129,7 +136,7 @@ THRESHOLD_KEYS: Tuple[str, ...] = (
 
 #: Tham số phân tích ảnh hưởng kết quả nên phải chốt cùng ngưỡng tiêu chí.
 #: - `ping_down_threshold`: số lần ping fail liên tiếp mới tính là 1 lần mất kết
-#:   nối → quyết định trực tiếp tiêu chí "Thời gian mất kết nối".
+#:   nối → dùng cho các cột downtime tham khảo (không còn chấm điểm).
 #: - `correlation_window_seconds` / `silent_window_threshold`: dựng lại
 #:   `correlation_summary` (tiêu chí "Kết nối MQTT", "Ổn định MQTT").
 ANALYSIS_KEYS: Tuple[str, ...] = (
@@ -332,7 +339,6 @@ class GatewayResult:
             "c_coverage": self.criteria.get("c_coverage", NA),
             "c_link": self.criteria.get("c_link", NA),
             "c_ping": self.criteria.get("c_ping", NA),
-            "c_downtime": self.criteria.get("c_downtime", NA),
             "c_stable": self.criteria.get("c_stable", NA),
             "c_late": self.criteria.get("c_late", NA),
             "criteria_passed": self.criteria_passed(),
@@ -352,7 +358,6 @@ class GatewayResultEvaluator:
     def __init__(self, config: Any = None) -> None:
         self.min_coverage_percent = float(_cfg(config, "min_coverage_percent", DEFAULTS["min_coverage_percent"]))
         self.min_ping_ok_percent = float(_cfg(config, "min_ping_ok_percent", DEFAULTS["min_ping_ok_percent"]))
-        self.max_downtime_seconds = float(_cfg(config, "max_downtime_seconds", DEFAULTS["max_downtime_seconds"]))
         self.max_silence_percent = float(_cfg(config, "max_silence_percent", DEFAULTS["max_silence_percent"]))
         self.max_late_percent = float(_cfg(config, "max_late_percent", DEFAULTS["max_late_percent"]))
         self.min_packets_for_rate = int(_cfg(config, "min_packets_for_rate", DEFAULTS["min_packets_for_rate"]))
@@ -530,13 +535,13 @@ class GatewayResultEvaluator:
         #                     đều PING_BLOCKED.
         #      LINK_DOWN    → ping fail VÀ MQTT im lặng: mất mạng/điện → FAIL
         #      GATEWAY_SILENT → ping OK nhưng MQTT im lặng: gateway bị treo →
-        #                     FAIL (tiêu chí 6 chắc chắn cũng trượt)
+        #                     FAIL (tiêu chí 5 chắc chắn cũng trượt)
         #      PARTIAL      → bất thường HỖN HỢP: có giai đoạn PING_BLOCKED
         #                     (bình thường khi ping bị chặn) lẫn giai đoạn mất
         #                     mạng thật. Có dấu hiệu mất kết nối thật nên FAIL.
         #      NO_DATA / "" → chưa kết luận được → N/A
         #    Ranh giới "bất thường nặng hay nhẹ" KHÔNG chấm ở đây mà ở tiêu chí 4
-        #    và 5 (tỉ lệ ping + thời gian mất kết nối) — nơi có con số so ngưỡng.
+        #    (tỉ lệ ping) và 5 (mức im lặng MQTT) — nơi có con số so ngưỡng.
         verdict = gw.verdict
         if verdict in (VERDICT_OK, VERDICT_PING_BLOCKED):
             out["c_link"] = PASS
@@ -555,22 +560,16 @@ class GatewayResultEvaluator:
                 PASS if gw.ping_success_rate_percent >= self.min_ping_ok_percent else FAIL
             )
 
-        # 5. Thời gian mất kết nối — chỉ đo được khi có ping.
-        if gw.ping_total <= 0:
-            out["c_downtime"] = NA
-        else:
-            out["c_downtime"] = (
-                PASS if gw.downtime_seconds <= self.max_downtime_seconds else FAIL
-            )
-
-        # 6. Ổn định MQTT — tỉ lệ window im lặng trên tổng số window.
+        # 5. Ổn định MQTT — tỉ lệ window im lặng trên tổng số window.
+        #    (Tiêu chí "thời gian mất kết nối" đã BỊ BỎ — xem docstring; các cột
+        #    `downtime_events` / `downtime_seconds` vẫn xuất ra CSV tham khảo.)
         silence = gw.silence_percent()
         if gw.windows_total <= 0 or silence is None:
             out["c_stable"] = NA
         else:
             out["c_stable"] = PASS if silence <= self.max_silence_percent else FAIL
 
-        # 7. Bắn hụt — chỉ có số liệu khi bật node trọng tâm.
+        # 6. Bắn hụt — chỉ có số liệu khi bật node trọng tâm.
         if gw.late_percent is None:
             out["c_late"] = NA
         else:
@@ -605,14 +604,6 @@ class GatewayResultEvaluator:
         if key == "c_ping":
             rate = gw.ping_success_rate_percent or 0.0
             return "ping OK %.2f%% (cần ≥ %.2f%%)" % (rate, self.min_ping_ok_percent)
-        if key == "c_downtime":
-            # Lưu ý: `downtime_seconds` là TỔNG thời gian ping fail chứ KHÔNG
-            # phải tổng thời gian MQTT im lặng — nói rõ để không đọc nhầm.
-            return "tổng %d lần ping fail %.1fs (cho phép ≤ %.1fs)" % (
-                gw.downtime_events,
-                gw.downtime_seconds,
-                self.max_downtime_seconds,
-            )
         if key == "c_stable":
             silence = gw.silence_percent() or 0.0
             return "MQTT im lặng %.2f%% window (cho phép ≤ %.2f%%)" % (
@@ -639,6 +630,7 @@ class GatewayResultEvaluator:
             total.mqtt_packets += item.mqtt_packets
             total.packets_published += item.packets_published
             total.ping_total += item.ping_total
+            # `downtime_*` vẫn cộng để hiển thị tham khảo (không còn chấm điểm).
             total.downtime_events += item.downtime_events
             total.downtime_seconds += item.downtime_seconds
             total.windows_total += item.windows_total

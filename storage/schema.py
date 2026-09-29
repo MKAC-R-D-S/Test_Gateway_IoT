@@ -201,8 +201,8 @@ GATEWAY_RESULT_COLUMNS: List[str] = [
     "missed_catch_percent",      # 100 − độ phủ (bắt hụt)
     "ping_total",
     "ping_success_rate_percent",
-    "downtime_events",
-    "downtime_seconds",
+    "downtime_events",            # tham khảo — KHÔNG vào kết luận ĐẠT/KHÔNG ĐẠT
+    "downtime_seconds",           # tham khảo — KHÔNG vào kết luận ĐẠT/KHÔNG ĐẠT
     "windows_total",
     "silence_windows",           # window MQTT im lặng
     "silence_percent",
@@ -212,9 +212,8 @@ GATEWAY_RESULT_COLUMNS: List[str] = [
     "c_coverage",                # 2. Độ phủ bản tin
     "c_link",                    # 3. Kết nối MQTT
     "c_ping",                    # 4. Tỉ lệ ping
-    "c_downtime",                # 5. Thời gian mất kết nối
-    "c_stable",                  # 6. Ổn định MQTT
-    "c_late",                    # 7. Bắn hụt (gửi trễ)
+    "c_stable",                  # 5. Ổn định MQTT
+    "c_late",                    # 6. Bắn hụt (gửi trễ)
     "criteria_passed",
     "criteria_failed",
     "criteria_na",
