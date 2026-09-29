@@ -169,15 +169,17 @@ class TestConfig:
     silent_window_threshold: int = 2
 
     # --- Tiêu chí ĐẠT / KHÔNG ĐẠT (xem `analytics/gateway_result.py`) ---
-    # Mỗi gateway được chấm PASS/FAIL/N-A theo 6 tiêu chí; tất cả tiêu chí áp
-    # dụng được đều PASS mới kết luận ĐẠT. Ngưỡng ở đây đều GHI ĐÈ được từ
-    # `config.json` (khoá `criteria_<tên>`). `min_packets_for_rate` ở mục Cảnh
-    # báo phía trên được dùng chung để chặn kết luận từ mẫu quá nhỏ.
-    criteria_min_coverage_percent: float = 85.0   # độ phủ bản tin tối thiểu
+    # Mỗi gateway được chấm PASS/FAIL/N-A theo 4 tiêu chí TRỰC TIẾP (có dữ liệu,
+    # độ phủ bản tin, tỉ lệ ping, bắn hụt); tất cả tiêu chí áp dụng được đều PASS
+    # mới kết luận ĐẠT. Ngưỡng ở đây đều GHI ĐÈ được từ `config.json`
+    # (khoá `criteria_<tên>`). `min_packets_for_rate` ở mục Cảnh báo phía trên
+    # được dùng chung để chặn kết luận từ mẫu quá nhỏ.
+    criteria_min_coverage_percent: float = 80.0   # độ phủ bản tin tối thiểu
     criteria_min_ping_ok_percent: float = 90.0    # tỉ lệ ping OK tối thiểu
-    # Tiêu chí "Thời gian mất kết nối" (downtime) ĐÃ BỎ khỏi kết luận — xem
-    # `analytics/gateway_result.py`. Các cột `downtime_*` chỉ còn để tham khảo.
-    criteria_max_silence_percent: float = 2.0     # % window MQTT im lặng tối đa
+    # Tiêu chí "Thời gian mất kết nối" (downtime), "Kết nối MQTT" (verdict
+    # ping↔MQTT) và "Ổn định MQTT" (% cửa sổ im lặng) ĐÃ BỎ khỏi kết luận — xem
+    # `analytics/gateway_result.py`. Các cột `downtime_*`, `verdict`,
+    # `windows_*`, `silence_*` chỉ còn để chẩn đoán.
     criteria_max_late_percent: float = 5.0        # % lần publish trễ tối đa
 
     # --- Theo dõi 1 node trên nhiều gateway (bắt hụt / bắn hụt) ---

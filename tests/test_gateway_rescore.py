@@ -129,8 +129,8 @@ def build_run(
 ) -> Path:
     """Dựng một phiên tối thiểu: đủ dữ liệu thô để chấm ra ĐẠT.
 
-    Mỗi bản tin được CẢ các gateway cùng nghe, nên độ phủ = 100 % và mọi tiêu
-    chí liên quan MQTT đều đạt.
+    Mỗi bản tin được CẢ các gateway cùng nghe, nên độ phủ = 100 % và các tiêu
+    chí chấm điểm đều đạt.
     """
     run_dir = root / "20260101_120000_AAAABBBBCCCC"
     (run_dir / "mqtt").mkdir(parents=True, exist_ok=True)
@@ -463,7 +463,6 @@ def test_scoring_params_snapshot_reads_criteria_prefix():
     config = SimpleNamespace(
         criteria_min_coverage_percent=90.0,
         criteria_min_ping_ok_percent=80.0,
-        criteria_max_silence_percent=1.0,
         criteria_max_late_percent=3.0,
         criteria_min_packets_for_rate=10,
         ping_down_threshold=4,
@@ -483,11 +482,11 @@ def test_scoring_params_snapshot_reads_criteria_prefix():
 def test_scoring_params_snapshot_falls_back_to_defaults():
     snapshot = scoring_params_snapshot(SimpleNamespace())
 
-    assert snapshot["min_coverage_percent"] == 85.0
+    assert snapshot["min_coverage_percent"] == 80.0
     assert snapshot["ping_down_threshold"] == 2
     assert set(snapshot) == {
         "min_coverage_percent", "min_ping_ok_percent",
-        "max_silence_percent", "max_late_percent", "min_packets_for_rate",
+        "max_late_percent", "min_packets_for_rate",
         "ping_down_threshold", "correlation_window_seconds",
         "silent_window_threshold",
     }

@@ -4,10 +4,13 @@ Vì sao phải kiểm bằng test chứ không chỉ đọc code: kết luận �
 thứ người dùng đọc để quyết định gateway có đạt hay không, nên mọi ranh giới dễ
 sai đều phải bị khoá lại:
 
-  * **`PING_BLOCKED` phải là ĐẠT** — ICMP bị chặn nhưng gateway vẫn gửi MQTT.
-    Dữ liệu thật (`data/runs/20260925_164556_2C07199E139C`) có 3 gateway với
-    ~620 000 bản tin MQTT mỗi con đều ra `PING_BLOCKED`; nếu coi đây là trượt
-    thì cả phiên bị kết luận sai.
+  * **Chỉ còn 4 tiêu chí TRỰC TIẾP**: có dữ liệu, độ phủ bản tin, tỉ lệ ping,
+    bắn hụt. `c_downtime`, `c_link` (nhãn `verdict` ping↔MQTT) và `c_stable`
+    (% cửa sổ im lặng) ĐÃ BỎ — chúng chỉ là suy luận gián tiếp, phụ thuộc
+    `correlation_window_seconds` nên chấm theo là trượt oan.
+  * **Cột tham khảo không được ảnh hưởng kết quả** — `verdict`, `windows_*`,
+    `silence_*`, `downtime_*` vẫn xuất ra CSV nhưng mọi giá trị của chúng đều
+    phải cho CÙNG một kết luận.
   * **`N/A` ≠ `FAIL`** — không bật ping thì `c_ping` là `N/A`, không phải trượt.
   * **Chặn theo cỡ mẫu** — mẫu quá nhỏ phải ra `N/A` chứ không ra `PASS`.
   * **Mẫu số độ phủ theo TỪNG gateway** — gateway không nghe được node nào đó
@@ -192,10 +195,14 @@ def test_distant_gateway_is_not_penalized_for_inaudible_node():
 
 
 # --------------------------------------------------------------------------
-# `PING_BLOCKED` — tiêu chí 3
+# Tiêu chí "Kết nối MQTT" / "Ổn định MQTT" ĐÃ BỎ khỏi kết luận
 # --------------------------------------------------------------------------
-def test_ping_blocked_gateway_passes_link_criterion():
-    """ICMP bị chặn nhưng MQTT chạy → `c_link = PASS`, không phải FAIL."""
+def test_mqtt_link_and_stability_columns_are_reference_only():
+    """`verdict` / `windows_*` / `silence_*` vẫn xuất ra nhưng KHÔNG chấm điểm.
+
+    Dữ liệu thật: cùng một gateway ra `PING_BLOCKED` ở phiên này và `PARTIAL` ở
+    phiên khác dù hành vi gửi y hệt → chấm theo `verdict` là trượt oan.
+    """
     evaluator = GatewayResultEvaluator(config())
 
     rows = evaluator.evaluate(
@@ -212,96 +219,48 @@ def test_ping_blocked_gateway_passes_link_criterion():
     )
 
     row = one(rows)
-    assert row["c_link"] == PASS
+    assert row["verdict"] == VERDICT_PING_BLOCKED     # cột tham khảo vẫn có
+    assert row["windows_total"] == 3821
+    assert row["silence_windows"] == 0
+    assert row["silence_percent"] == 0.0
+    assert "c_link" not in row                        # nhưng không còn tiêu chí
+    assert "c_stable" not in row
     assert row["c_valid"] == PASS
     assert row["c_coverage"] == PASS
-    assert row["c_ping"] == NA            # ping bị chặn → không đo được
-    assert row["c_stable"] == PASS
+    assert row["c_ping"] == NA                        # ping bị chặn → không đo được
     assert row["result"] == RESULT_PASS
 
 
-def test_healthy_gateway_passes_link_criterion():
+def test_verdict_and_silence_never_change_the_result():
+    """Mọi nhãn `verdict` và mọi mức im lặng đều cho CÙNG một kết luận.
+
+    Đây là bất biến quan trọng nhất sau khi bỏ 2 tiêu chí: không còn đường nào
+    để kết quả đổi chỉ vì dữ liệu tương quan ping↔MQTT.
+    """
     evaluator = GatewayResultEvaluator(config())
-    rows = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        ping_rows=[ping_row(GW1)],
-        correlation_gateways=[context(GW1, verdict=VERDICT_OK, windows_total=10)],
-    )
-    assert one(rows)["c_link"] == PASS
+    cases = [
+        (VERDICT_OK, 0, 100),
+        (VERDICT_GATEWAY_SILENT, 98, 100),   # im lặng 98% → vẫn phải ĐẠT
+        (VERDICT_LINK_DOWN, 100, 100),
+        (VERDICT_PARTIAL, 60, 100),
+        (VERDICT_PING_BLOCKED, 0, 100),
+        (VERDICT_NO_DATA, 0, 0),
+    ]
+    for verdict, silent, windows in cases:
+        rows = evaluator.evaluate(
+            mqtt_rows=[mqtt_row([GW1]) for _ in range(100)],
+            correlation_gateways=[
+                context(GW1, verdict=verdict, windows_total=windows,
+                        windows_ping_ok_mqtt_silent=silent)
+            ],
+        )
+        row = one(rows)
+        assert row["criteria_failed"] == 0, (verdict, row["result_reason"])
+        assert row["result"] == RESULT_PASS, (verdict, row["result_reason"])
 
 
-def test_silent_gateway_fails_link_and_stability():
-    """Ping OK nhưng MQTT im lặng gần hết → trượt cả tiêu chí 3 và 6."""
-    evaluator = GatewayResultEvaluator(config())
-
-    rows = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1]) for _ in range(10)],
-        ping_rows=[ping_row(GW1)],
-        correlation_gateways=[
-            context(
-                GW1,
-                mqtt_packets=10,
-                windows_total=3821,
-                windows_ping_ok_mqtt_silent=3800,
-                verdict=VERDICT_GATEWAY_SILENT,
-            )
-        ],
-    )
-
-    row = one(rows)
-    assert row["c_link"] == FAIL
-    assert row["c_stable"] == FAIL
-    assert row["result"] == RESULT_FAIL
-    assert "Kết nối MQTT" in row["result_reason"]
-    assert "Ổn định MQTT" in row["result_reason"]
-
-
-def test_link_down_verdict_fails_link_criterion():
-    evaluator = GatewayResultEvaluator(config())
-    rows = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        correlation_gateways=[
-            context(GW1, windows_total=100, windows_ping_down_mqtt_silent=100,
-                    verdict=VERDICT_LINK_DOWN)
-        ],
-    )
-    assert one(rows)["c_link"] == FAIL
-
-
-def test_partial_verdict_fails_link_criterion():
-    """`PARTIAL` = vừa ping-bị-chặn vừa mất mạng thật → có dấu hiệu trượt."""
-    evaluator = GatewayResultEvaluator(config())
-    rows = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        correlation_gateways=[
-            context(GW1, windows_total=100, windows_ping_down_mqtt_silent=40,
-                    windows_ping_blocked=60, verdict=VERDICT_PARTIAL)
-        ],
-    )
-
-    row = one(rows)
-    assert row["verdict"] == VERDICT_PARTIAL
-    assert row["c_link"] == FAIL
-    assert "Bất thường hỗn hợp" in row["result_reason"]
-
-
-def test_verdict_not_yet_decided_is_not_applicable():
-    """`NO_DATA` = chưa đủ dữ liệu để kết luận → N/A, KHÔNG phải trượt."""
-    evaluator = GatewayResultEvaluator(config())
-    rows = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        correlation_gateways=[
-            context(GW1, windows_total=5, verdict=VERDICT_NO_DATA)
-        ],
-    )
-
-    row = one(rows)
-    assert row["c_link"] == NA
-    assert row["result"] == RESULT_PASS
-
-
-def test_no_correlation_row_leaves_link_criterion_not_applicable():
-    """Không có dòng correlation → chưa kết luận được, KHÔNG phải trượt."""
+def test_no_correlation_row_still_scores_from_mqtt_and_ping():
+    """Thiếu `correlation_summary` vẫn chấm được từ chính dữ liệu MQTT + ping."""
     evaluator = GatewayResultEvaluator(config())
     rows = evaluator.evaluate(
         mqtt_rows=[mqtt_row([GW1])],
@@ -309,8 +268,10 @@ def test_no_correlation_row_leaves_link_criterion_not_applicable():
     )
 
     row = one(rows)
-    assert row["verdict"] == ""
-    assert row["c_link"] == NA
+    assert row["verdict"] == ""          # cột tham khảo để trống
+    assert row["c_valid"] == PASS        # từ mqtt_data_*.csv
+    assert row["c_ping"] == PASS         # từ ping_summary.csv (100 mẫu, 100 %)
+    assert row["c_coverage"] == NA       # mẫu < min_packets_for_rate
     assert row["result"] == RESULT_PASS
 
 
@@ -351,7 +312,22 @@ def test_configured_but_silent_device_still_appears_and_fails():
 # --------------------------------------------------------------------------
 def test_coverage_below_threshold_fails():
     evaluator = GatewayResultEvaluator(config())
-    # GW1 nghe 80/100 bản tin → hụt 20% > 15% cho phép.
+    # GW1 nghe 75/100 bản tin → hụt 25% > 20% cho phép.
+    mqtt = [mqtt_row([GW1, GW2]) for _ in range(75)]
+    mqtt += [mqtt_row([GW2]) for _ in range(25)]
+
+    rows = evaluator.evaluate(mqtt_rows=mqtt, correlation_gateways=[context(GW1)])
+
+    row = by_uid(rows)[GW1]
+    assert row["coverage_percent"] == 75.0
+    assert row["missed_catch_percent"] == 25.0
+    assert row["c_coverage"] == FAIL
+    assert row["result"] == RESULT_FAIL
+
+
+def test_coverage_at_exact_threshold_passes():
+    """Biên: độ phủ ĐÚNG 80% (ngưỡng) phải ĐẠT."""
+    evaluator = GatewayResultEvaluator(config())
     mqtt = [mqtt_row([GW1, GW2]) for _ in range(80)]
     mqtt += [mqtt_row([GW2]) for _ in range(20)]
 
@@ -360,20 +336,6 @@ def test_coverage_below_threshold_fails():
     row = by_uid(rows)[GW1]
     assert row["coverage_percent"] == 80.0
     assert row["missed_catch_percent"] == 20.0
-    assert row["c_coverage"] == FAIL
-    assert row["result"] == RESULT_FAIL
-
-
-def test_coverage_at_exact_threshold_passes():
-    """Biên: hụt ĐÚNG 15% (ngưỡng) phải ĐẠT."""
-    evaluator = GatewayResultEvaluator(config())
-    mqtt = [mqtt_row([GW1, GW2]) for _ in range(85)]
-    mqtt += [mqtt_row([GW2]) for _ in range(15)]
-
-    rows = evaluator.evaluate(mqtt_rows=mqtt, correlation_gateways=[context(GW1)])
-
-    row = by_uid(rows)[GW1]
-    assert row["missed_catch_percent"] == 15.0
     assert row["c_coverage"] == PASS
 
 
@@ -399,16 +361,18 @@ def test_guard_threshold_is_configurable():
 def test_criteria_prefixed_keys_take_precedence():
     """Khoá `criteria_<tên>` trong `config.json` thắng giá trị mặc định."""
     evaluator = GatewayResultEvaluator(config(criteria_min_coverage_percent=50.0))
-    mqtt = [mqtt_row([GW1, GW2]) for _ in range(80)]
-    mqtt += [mqtt_row([GW2]) for _ in range(20)]
+    # Hụt 40% > 20% (mặc định 80%) nhưng ≤ 50% (ghi đè) → ĐẠT.
+    mqtt = [mqtt_row([GW1, GW2]) for _ in range(60)]
+    mqtt += [mqtt_row([GW2]) for _ in range(40)]
 
     rows = evaluator.evaluate(mqtt_rows=mqtt, correlation_gateways=[context(GW1)])
 
-    assert by_uid(rows)[GW1]["c_coverage"] == PASS    # hụt 20% ≤ 50%
+    assert by_uid(rows)[GW1]["missed_catch_percent"] == 40.0
+    assert by_uid(rows)[GW1]["c_coverage"] == PASS
 
 
 # --------------------------------------------------------------------------
-# Tiêu chí 4 & 5 — Ping
+# Tiêu chí 3 — Tỉ lệ ping
 # --------------------------------------------------------------------------
 def test_ping_disabled_is_not_applicable_not_failed():
     evaluator = GatewayResultEvaluator(config())
@@ -475,41 +439,7 @@ def test_small_ping_sample_is_not_applicable():
 
 
 # --------------------------------------------------------------------------
-# Tiêu chí 6 — Ổn định MQTT
-# --------------------------------------------------------------------------
-def test_silence_at_threshold_passes_and_above_fails():
-    evaluator = GatewayResultEvaluator(config(criteria_max_silence_percent=2.0))
-
-    passing = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        correlation_gateways=[
-            context(GW1, verdict=VERDICT_OK, windows_total=100,
-                    windows_ping_ok_mqtt_silent=2)
-        ],
-    )
-    failing = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        correlation_gateways=[
-            context(GW1, verdict=VERDICT_OK, windows_total=100,
-                    windows_ping_ok_mqtt_silent=3)
-        ],
-    )
-
-    assert one(passing)["c_stable"] == PASS
-    assert one(failing)["c_stable"] == FAIL
-
-
-def test_missing_windows_is_not_applicable():
-    evaluator = GatewayResultEvaluator(config())
-    rows = evaluator.evaluate(
-        mqtt_rows=[mqtt_row([GW1])],
-        correlation_gateways=[context(GW1, verdict=VERDICT_OK, windows_total=0)],
-    )
-    assert one(rows)["c_stable"] == NA
-
-
-# --------------------------------------------------------------------------
-# Tiêu chí 7 — Bắn hụt (chỉ có khi bật node trọng tâm)
+# Tiêu chí 4 — Bắn hụt (chỉ có khi bật node trọng tâm)
 # --------------------------------------------------------------------------
 def test_late_criterion_is_not_applicable_without_focused_node():
     evaluator = GatewayResultEvaluator(config())
@@ -584,7 +514,6 @@ def test_total_fails_when_any_gateway_fails():
     assert total["result"] == RESULT_FAIL
     assert GW2 in total["result_reason"]
     assert total["c_ping"] == FAIL        # có gateway trượt → tiêu chí chung FAIL
-    assert total["c_link"] == NA          # cả hai đều không có dữ liệu → N/A
 
 
 def test_total_passes_only_when_all_gateways_pass():
@@ -717,9 +646,9 @@ def test_criteria_columns_are_exactly_the_declared_criteria():
 
     row = one(rows)
     keys = [key for key, _label in CRITERIA]
-    assert len(keys) == 6
+    assert len(keys) == 4
     assert all(row[key] in (PASS, FAIL, NA) for key in keys)
-    assert row["criteria_passed"] + row["criteria_failed"] + row["criteria_na"] == 6
+    assert row["criteria_passed"] + row["criteria_failed"] + row["criteria_na"] == 4
 
 
 def test_counts_and_reason_agree_with_failed_keys():

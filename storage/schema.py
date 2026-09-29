@@ -186,9 +186,11 @@ CORRELATION_COLUMNS: List[str] = [
 #   `result`     : ĐẠT khi MỌI tiêu chí áp dụng được đều PASS, ngược lại KHÔNG ĐẠT.
 #   `result_reason`: nêu đúng tiêu chí không đạt kèm giá trị thực vs ngưỡng.
 #
-# LƯU Ý: `PING_BLOCKED` được tính là ĐẠT (ICMP bị chặn nhưng gateway vẫn gửi
-# MQTT). `packets_published` / `coverage_percent` tính trên luồng bản tin ĐÃ GỘP
-# nên độ phủ là **chặn trên** (xem `analytics/gateway_result.py`).
+# LƯU Ý: chỉ còn 4 tiêu chí, tất cả đều là bằng chứng TRỰC TIẾP. Các cột
+# `downtime_*`, `verdict`, `windows_*`, `silence_*` VẪN được xuất ra để CHẨN ĐOÁN
+# (xem tab "MQTT ↔ Ping") nhưng KHÔNG vào kết luận ĐẠT/KHÔNG ĐẠT.
+# `packets_published` / `coverage_percent` tính trên luồng bản tin ĐÃ GỘP nên độ
+# phủ là **chặn trên** (xem `analytics/gateway_result.py`).
 # ---------------------------------------------------------------------------
 GATEWAY_RESULT_COLUMNS: List[str] = [
     "gateway_uid",
@@ -203,17 +205,15 @@ GATEWAY_RESULT_COLUMNS: List[str] = [
     "ping_success_rate_percent",
     "downtime_events",            # tham khảo — KHÔNG vào kết luận ĐẠT/KHÔNG ĐẠT
     "downtime_seconds",           # tham khảo — KHÔNG vào kết luận ĐẠT/KHÔNG ĐẠT
-    "windows_total",
-    "silence_windows",           # window MQTT im lặng
-    "silence_percent",
-    "verdict",                   # kết luận MQTT↔ping (correlation_summary)
+    "windows_total",             # tham khảo — dựng bởi analytics/correlation.py
+    "silence_windows",           # tham khảo — window MQTT im lặng
+    "silence_percent",           # tham khảo
+    "verdict",                   # tham khảo — kết luận MQTT↔ping (correlation_summary)
     "late_percent",              # bắn hụt — chỉ có khi bật node trọng tâm
     "c_valid",                   # 1. Có dữ liệu
     "c_coverage",                # 2. Độ phủ bản tin
-    "c_link",                    # 3. Kết nối MQTT
-    "c_ping",                    # 4. Tỉ lệ ping
-    "c_stable",                  # 5. Ổn định MQTT
-    "c_late",                    # 6. Bắn hụt (gửi trễ)
+    "c_ping",                    # 3. Tỉ lệ ping
+    "c_late",                    # 4. Bắn hụt (gửi trễ)
     "criteria_passed",
     "criteria_failed",
     "criteria_na",
