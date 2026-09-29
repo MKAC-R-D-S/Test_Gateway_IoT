@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# Du lieu do (data/runs) KHONG dua len Git: moi phien 10-200 MB, tong ~1.6 GB.
+# Giu lai tren may de xem bang tab "Lich su phien".
+# ---------------------------------------------------------------------------
+data/
+
+# Log runtime
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Cache cong cu
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

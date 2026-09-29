@@ -1,0 +1,8 @@
+# Chỉ cần paho-mqtt (MQTT) + requests (ping/HTTP phụ trợ).
+# pyserial không bắt buộc nhưng giữ để tương thích với các tool cùng repo.
+paho-mqtt>=2.1.0
+requests>=2.31.0
+pyserial>=3.5
+
+# GUI (bỏ qua nếu chỉ chạy `python main.py --headless`)
+PyQt5>=5.15.10
