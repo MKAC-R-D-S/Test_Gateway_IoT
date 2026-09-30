@@ -260,6 +260,10 @@ RUN_SUMMARY_COLUMNS: List[str] = [
     "session_start",
     "session_end",
     "duration_seconds",
+    #: Tổng giây phiên bị TẠM DỪNG. `duration_seconds` đã TRỪ khoảng này, còn
+    #: `session_end − session_start` thì chưa — cột này giúp đối chiếu hai con số
+    #: mà không phải đoán xem phiên có bị tạm dừng hay không.
+    "paused_seconds",
     "broker",
     "subscribed_topics",
     "total_messages",

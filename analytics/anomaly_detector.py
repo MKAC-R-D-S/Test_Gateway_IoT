@@ -244,6 +244,29 @@ class AnomalyDetector:
         self._last_alert_at.clear()
         self._gateway_silent_open.clear()
 
+    def shift_baselines(self, seconds: float) -> None:
+        """Đẩy mọi mốc "lần cuối thấy" tới `seconds` giây về tương lai.
+
+        Dùng khi phiên được TIẾP TỤC sau một khoảng TẠM DỪNG. Trong lúc tạm dừng
+        tool không nhận bản tin nào (đúng chủ ý), nhưng bộ phát hiện vẫn so mốc
+        cuối với đồng hồ thật — nếu không đẩy mốc thì vừa bấm "Tiếp tục" là có
+        ngay loạt cảnh báo `NODE_SILENT` / `GATEWAY_SILENT` GIẢ, và các cảnh báo
+        đó đi thẳng vào `alerts_summary.csv` của báo cáo.
+
+        Không đụng tới danh sách cảnh báo đã phát (dữ liệu lịch sử phải giữ
+        nguyên) — cờ `*_silent_open` tự được xoá ở lần quét kế tiếp vì `idle`
+        tụt về ~0.
+        """
+        if seconds <= 0:
+            return
+        delta = timedelta(seconds=float(seconds))
+        for watch in self._nodes.values():
+            watch.last_seen_dt = watch.last_seen_dt + delta
+        for gateway, (seen_dt, name, uid) in list(self._last_gateway_seen.items()):
+            self._last_gateway_seen[gateway] = (seen_dt + delta, name, uid)
+        for key, stamp in list(self._last_alert_at.items()):
+            self._last_alert_at[key] = stamp + delta
+
     # ------------------------------------------------------------- nội bộ
     def _track_gateway(self, record: MQTTRecord, stamp: datetime) -> List[AlertRecord]:
         if not record.gateway_uid:

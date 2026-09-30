@@ -307,7 +307,13 @@ class MonitorTab(QWidget):
             align_right=("packets", "missing", "duplicate", "out_of_order",
                          "seq_reset", "seq_wrap", "delivery_rate_percent"),
         )
-        tabs.addTab(self._make_view(self.model_nodes), "Tổng hợp node")
+        # NHÁY ĐÚP một dòng trong bảng này = theo dõi node đó ở trang
+        # "Node trọng tâm" (bắt hụt / bắn hụt). Không cần copy UID thủ công.
+        # Xem `_on_node_double_clicked()`.
+        self._view_nodes = self._make_view(self.model_nodes)
+        self._node_tabs = tabs
+        self._view_nodes.doubleClicked.connect(self._on_node_double_clicked)
+        tabs.addTab(self._view_nodes, "Tổng hợp node")
 
         # --- cảnh báo ---
         self.model_alerts = DictTableModel(
@@ -340,7 +346,8 @@ class MonitorTab(QWidget):
         tabs.addTab(self._make_view(self.model_down), "Downtime")
 
         # --- node trọng tâm (bắt hụt / bắn hụt) ---
-        tabs.addTab(self._build_focus_page(), "Node trọng tâm")
+        self.focus_page = self._build_focus_page()
+        tabs.addTab(self.focus_page, "Node trọng tâm")
 
         self.tables_tabs = tabs
         return tabs
@@ -371,11 +378,20 @@ class MonitorTab(QWidget):
         self.btn_focus_apply.clicked.connect(self._apply_focus)
         bar_layout.addWidget(self.btn_focus_apply)
         self.btn_focus_clear = QPushButton("Bỏ theo dõi")
+        self.btn_focus_clear.setToolTip("Ngừng theo dõi node hiện tại (giữ nguyên số liệu đã thu)")
         self.btn_focus_clear.clicked.connect(lambda: self._request_focus(""))
         bar_layout.addWidget(self.btn_focus_clear)
+        self.btn_show_nodes = QPushButton("◀ Thoát ra (Tổng hợp node)")
+        self.btn_show_nodes.setToolTip(
+            "Quay lại bảng Tổng hợp node để xem hoặc chọn node khác.\n"
+            "Mẹo: ở bảng Tổng hợp node, NHÁY ĐÚP vào một dòng cũng bật theo dõi node đó."
+        )
+        self.btn_show_nodes.clicked.connect(self.show_node_table)
+        bar_layout.addWidget(self.btn_show_nodes)
         bar_layout.addStretch(1)
         self.lbl_focus = QLabel("— chưa chọn node nào")
         self.lbl_focus.setStyleSheet("color: %s; font-size: 10px;" % theme.COLOR_DIM)
+        self.lbl_focus.setTextInteractionFlags(Qt.TextSelectableByMouse)
         bar_layout.addWidget(self.lbl_focus)
         layout.addWidget(bar)
 
@@ -433,6 +449,46 @@ class MonitorTab(QWidget):
 
     def _apply_focus(self) -> None:
         self._request_focus(self.edit_focus.text())
+
+    # -------------------------------------------------- nháy đúp → node trọng tâm
+    def _on_node_double_clicked(self, index) -> None:
+        """Nháy đúp 1 dòng ở bảng "Tổng hợp node" → theo dõi node đó.
+
+        Người dùng hay muốn "xem kỹ node này": copy UID thủ công vừa lâu vừa dễ
+        sai. Sau khi bật theo dõi, chuyển luôn sang trang "Node trọng tâm" để
+        thấy kết quả; ở đó có nút **◀ Thoát ra (Tổng hợp node)** để quay lại
+        chọn node khác.
+        """
+        if index is None or not index.isValid():
+            return
+        row = self.model_nodes.row_at(index.row()) or {}
+        node_uid = str(row.get("node_uid") or "").strip()
+        if not node_uid:
+            return
+        self._request_focus(node_uid)
+        self.show_focus_page()
+
+    def show_focus_page(self) -> None:
+        """Mở trang "Node trọng tâm" (dùng chung cho nháy đúp + nút thoát ra)."""
+        tabs = getattr(self, "_node_tabs", None)
+        if tabs is not None and hasattr(self, "focus_page"):
+            tabs.setCurrentWidget(self.focus_page)
+
+    def show_node_table(self) -> None:
+        """Quay lại bảng "Tổng hợp node" để xem/chọn node khác.
+
+        **Không** bỏ theo dõi — số liệu bắt hụt / bắn hụt vẫn tiếp tục được thu
+        cho node đang chọn, và ô "UID node theo dõi" giữ nguyên UID để người dùng
+        biết mình đang theo dõi node nào.
+        """
+        tabs = getattr(self, "_node_tabs", None)
+        view = getattr(self, "_view_nodes", None)
+        if tabs is not None and view is not None:
+            tabs.setCurrentWidget(view)
+            try:
+                view.setFocus()
+            except Exception:  # noqa: BLE001 - tiện dụng, không bắt buộc
+                pass
 
     def _request_focus(self, node_uid: str) -> None:
         """Chuẩn hoá UID rồi phát signal cho main_window (nơi có runner/config)."""
@@ -570,8 +626,14 @@ class MonitorTab(QWidget):
         csv = stats.get("csv") or {}
 
         elapsed = session.get("elapsed_seconds") or pipeline.get("elapsed_seconds") or 0
-        self.card_elapsed.set(theme.human_duration(elapsed),
-                              "bắt đầu %s" % (session.get("started_at") or "-"))
+        elapsed_sub = "bắt đầu %s" % (session.get("started_at") or "-")
+        if session.get("paused"):
+            # Đồng hồ ĐỨNG vì tạm dừng: hiện rõ để không ai tưởng số liệu đang chạy.
+            elapsed_sub = "⏸ tạm dừng — đã nghỉ %s • bắt đầu %s" % (
+                theme.human_duration(session.get("paused_seconds") or 0),
+                session.get("started_at") or "-",
+            )
+        self.card_elapsed.set(theme.human_duration(elapsed), elapsed_sub)
 
         connected = bool(mqtt.get("connected"))
         self.card_mqtt.set(
@@ -634,6 +696,11 @@ class MonitorTab(QWidget):
             theme.human_duration(down["seconds"]),
             theme.human_count(down["events"]),
         )
+        if ping.get("paused"):
+            # Nói rõ vì sao số "Tổng ping" đứng yên: tool CỐ Ý không chạy ICMP khi
+            # tạm dừng, KHÔNG phải các gateway mất kết nối (nếu không, người đọc
+            # báo cáo dễ hiểu sai thành downtime).
+            ping_sub += " • ⏸ KHÔNG chạy ICMP (đang tạm dừng)"
         self.card_ping.set(
             "%s%%" % (round(100.0 * ping_ok / ping_total, 1) if ping_total else "—"),
             ping_sub,

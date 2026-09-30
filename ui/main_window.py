@@ -360,12 +360,16 @@ class MainWindow(QMainWindow):
         if pause:
             self.runner.pause()
             self.monitor_tab.log(
-                "⏸ Tạm dừng GHI dữ liệu (vẫn giữ kết nối broker). "
-                "Bản tin đến trong lúc này KHÔNG được ghi CSV.", "WARN"
+                "⏸ TẠM DỪNG: KHÔNG ghi bản tin, KHÔNG chạy ping (ICMP), "
+                "đồng hồ thời lượng đứng. Vẫn giữ kết nối broker. "
+                "Khoảng thời gian này KHÔNG tính vào thời lượng phiên.", "WARN"
             )
         else:
             self.runner.resume()
-            self.monitor_tab.log("▶ Ghi dữ liệu trở lại", "OK")
+            self.monitor_tab.log(
+                "▶ TIẾP TỤC: ghi bản tin và chạy lại ping. "
+                "Thời gian đã tạm dừng không được tính vào thời lượng phiên.", "OK"
+            )
 
     def stop_session(self) -> None:
         if self.runner is None or not self.runner.is_running():
@@ -508,9 +512,16 @@ class MainWindow(QMainWindow):
         stats = self.runner.stats()
         session = stats.get("session") or {}
         if session:
-            self.lbl_sb_elapsed.setText(
-                "Đã chạy: %s" % theme.human_duration(session.get("elapsed_seconds"))
-            )
+            elapsed = session.get("elapsed_seconds")
+            text = "Đã chạy: %s" % theme.human_duration(elapsed)
+            if session.get("paused"):
+                # Đồng hồ đang ĐỨNG vì phiên tạm dừng — nói rõ để người dùng không
+                # tưởng tool bị treo, và cho biết đã nghỉ bao lâu.
+                paused_seconds = session.get("paused_seconds") or 0
+                text += "  ⏸ (đang tạm dừng, đã nghỉ %s)" % theme.human_duration(
+                    paused_seconds
+                )
+            self.lbl_sb_elapsed.setText(text)
         pipeline = stats.get("pipeline") or {}
         counters = pipeline.get("counters") or {}
         total = counters.get("total_messages")

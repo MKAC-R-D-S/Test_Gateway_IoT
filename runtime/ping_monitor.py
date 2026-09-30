@@ -89,6 +89,7 @@ class PingMonitor:
 
         self._threads: List[threading.Thread] = []
         self._stop = threading.Event()
+        self._paused = threading.Event()
         self._semaphore = threading.Semaphore(self.max_concurrent)
         self._lock = threading.Lock()
         self.total_pings = 0
@@ -108,6 +109,7 @@ class PingMonitor:
             log.warning("Không có gateway nào bật ping (thiếu/không có IP)")
             return
         self._stop.clear()
+        self._paused.clear()
         for target in self.targets.values():
             thread = threading.Thread(
                 target=self._run_target,
@@ -122,12 +124,39 @@ class PingMonitor:
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()
+        # Đánh thức mọi thread đang chờ lịch để chúng thoát ngay, không phải đợi
+        # hết chu kỳ ping (mặc định 10 s) trong lúc GUI đứng chờ.
+        self._paused.set()
         for thread in self._threads:
             thread.join(timeout=timeout)
         self._threads.clear()
 
+    def pause(self) -> None:
+        """Tạm dừng ping: thread còn sống nhưng KHÔNG chạy ICMP nào nữa.
+
+        Cố ý không phát `PingRecord` fail khi tạm dừng: nếu phát thì một lần tạm
+        dừng dài hơn `ping_down_threshold × ping_interval_seconds` sẽ được
+        `PingTracker` ghi thành một cửa sổ DOWNTIME giả trong báo cáo.
+        """
+        if self._paused.is_set():
+            return
+        self._paused.set()
+        log.info("PingMonitor: TẠM DỪNG — không chạy ICMP cho %d gateway",
+                 len(self._threads) or len(self.targets))
+
+    def resume(self) -> None:
+        """Chạy lại ICMP. Thread không tự "dồn" các lần ping đã lỡ → nhịp bình thường."""
+        if not self._paused.is_set():
+            return
+        self._paused.clear()
+        log.info("PingMonitor: TIẾP TỤC — chạy lại ICMP cho %d gateway",
+                 len(self._threads) or len(self.targets))
+
     def is_running(self) -> bool:
         return bool(self._threads) and not self._stop.is_set()
+
+    def is_paused(self) -> bool:
+        return self._paused.is_set()
 
     def update_targets(self, targets: List[PingTarget]) -> None:
         """Nạp lại danh sách mục tiêu (đổi IP/thêm gateway) — cần stop/start."""
@@ -140,6 +169,7 @@ class PingMonitor:
     def stats(self) -> Dict[str, Any]:
         return {
             "running": self.is_running(),
+            "paused": self.is_paused(),
             "available": self.available,
             "targets": len(self.targets),
             "interval_seconds": self.interval,
@@ -152,11 +182,21 @@ class PingMonitor:
     def _run_target(self, target: PingTarget) -> None:
         # Lệch pha nhẹ giữa các gateway để không dồn ICMP cùng lúc.
         jitter = (hash(target.gateway_uid) % 1000) / 1000.0
-        if self._stop.wait(self.interval * jitter):
+        if self._sleep(self.interval * jitter):
             return
         while not self._stop.is_set():
+            if self._paused.is_set():
+                # Tạm dừng: ngủ ngắn rồi kiểm lại. Dùng `_stop.wait` để lệnh stop()
+                # vẫn đánh thức được ngay lập tức.
+                if self._stop.wait(0.25):
+                    return
+                continue
             started = time.monotonic()
             outcome = self._ping_once(target.ip_address)
+            # Khoảng tạm dừng xen vào giữa lúc bắt đầu ping và lúc có kết quả:
+            # bỏ kết quả đó, KHÔNG ghi counter/CSV.
+            if self._paused.is_set() or self._stop.is_set():
+                continue
             record = PingRecord(
                 timestamp=datetime.now().astimezone().isoformat(timespec="milliseconds"),
                 gateway_uid=target.gateway_uid.upper(),
@@ -175,8 +215,25 @@ class PingMonitor:
             self._dispatch(record)
             elapsed = time.monotonic() - started
             remaining = max(0.0, self.interval - elapsed)
-            if self._stop.wait(remaining):
+            if self._sleep(remaining):
                 break
+
+    def _sleep(self, seconds: float) -> bool:
+        """Ngủ `seconds`, thoát ngay khi bị stop HOẶC bị tạm dừng.
+
+        Nhờ thoát khi tạm dừng, thời điểm kết thúc tạm dừng không phải chờ hết
+        chu kỳ ping mới có lần ping kế tiếp.
+        """
+        if seconds <= 0:
+            return self._stop.is_set()
+        deadline = time.monotonic() + seconds
+        while not self._stop.is_set() and not self._paused.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if self._stop.wait(min(0.25, remaining)):
+                return True
+        return self._stop.is_set()
 
     def _dispatch(self, record: PingRecord) -> None:
         handler = self.on_result

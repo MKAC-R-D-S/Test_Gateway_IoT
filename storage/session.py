@@ -61,6 +61,14 @@ class RunSession:
     started_at: str = ""
     ended_at: str = ""
     duration_seconds: Optional[float] = None
+    #: Tổng số giây phiên bị TẠM DỪNG (đã đóng). Khi người dùng bấm "Tạm dừng",
+    #: tool ngừng ping và ngừng ghi; khoảng thời gian đó KHÔNG được tính vào
+    #: "Thời lượng" của phiên — nếu tính thì báo cáo sẽ nói phiên dài hơn thực tế
+    #: đo và tỉ lệ ping/độ phủ bị pha loãng một cách vô nghĩa.
+    paused_seconds: float = 0.0
+    #: Mốc bắt đầu khoảng tạm dừng ĐANG mở (rỗng = không tạm dừng). Chỉ dùng để
+    #: trừ dần vào `elapsed_seconds()` khi GUI hỏi trong lúc đang tạm dừng.
+    pause_started_at: str = ""
     planned_hours: Optional[float] = None
     broker: str = ""
     subscribed_topics: List[str] = field(default_factory=list)
@@ -139,27 +147,77 @@ class RunSession:
         return path
 
     def finish(self, status: str = STATUS_STOPPED, reason: str = "") -> None:
+        # Nếu phiên bị dừng NGAY TRONG LÚC đang tạm dừng thì phải chốt nốt khoảng
+        # tạm dừng đang mở, nếu không nó sẽ bị tính vào thời lượng phiên.
+        self.mark_resumed()
         self.ended_at = datetime.now().astimezone().isoformat(timespec="seconds")
         self.status = status
         if reason:
             self.stop_reason = reason
-        started = parse_iso(self.started_at)
-        ended = parse_iso(self.ended_at)
-        if started and ended:
-            try:
-                self.duration_seconds = round((ended - started).total_seconds(), 3)
-            except TypeError:
-                self.duration_seconds = None
+        # `duration_seconds` là THỜI GIAN ĐO THỰC TẾ (đã trừ mọi khoảng tạm dừng),
+        # không phải khoảng cách từ `started_at` tới `ended_at` — đó chính là lỗi
+        # "tạm dừng mà đồng hồ vẫn chạy" trước đây.
+        self.duration_seconds = round(self.active_seconds(), 3)
         self.save()
 
+    # ---------------------------------------------------------- đồng hồ phiên
+    def mark_paused(self) -> None:
+        """Bắt đầu một khoảng tạm dừng (idempotent — gọi lại khi đang tạm dừng)."""
+        if self.pause_started_at:
+            return
+        self.pause_started_at = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    def mark_resumed(self) -> None:
+        """Đóng khoảng tạm dừng đang mở và cộng dồn vào `paused_seconds`."""
+        if not self.pause_started_at:
+            return
+        started = parse_iso(self.pause_started_at)
+        self.pause_started_at = ""
+        if not started:
+            return
+        try:
+            self.paused_seconds += max(
+                0.0, (datetime.now(started.tzinfo) - started).total_seconds()
+            )
+        except (TypeError, ValueError):
+            pass
+
+    @property
+    def is_paused(self) -> bool:
+        return bool(self.pause_started_at)
+
+    def paused_seconds_now(self) -> float:
+        """Tổng giây đã tạm dừng, kể cả khoảng đang mở (dùng để hiển thị)."""
+        paused = self.paused_seconds
+        if self.pause_started_at:
+            started = parse_iso(self.pause_started_at)
+            if started:
+                try:
+                    paused += max(
+                        0.0, (datetime.now(started.tzinfo) - started).total_seconds()
+                    )
+                except (TypeError, ValueError):
+                    pass
+        return max(0.0, paused)
+
     def elapsed_seconds(self) -> float:
+        """Thời gian ĐÃ ĐO của phiên (đã trừ thời gian tạm dừng).
+
+        Trước đây hàm này trả `now - started_at` nên bấm "Tạm dừng" vẫn thấy đồng
+        hồ chạy. Giữ nguyên tên hàm vì mọi nơi gọi nó đều muốn "thời lượng thực".
+        """
         started = parse_iso(self.started_at)
         if not started:
             return 0.0
         try:
-            return max(0.0, (datetime.now(started.tzinfo) - started).total_seconds())
+            wall = (datetime.now(started.tzinfo) - started).total_seconds()
         except (TypeError, ValueError):
             return 0.0
+        return max(0.0, wall - self.paused_seconds_now())
+
+    def active_seconds(self) -> float:
+        """Bí danh của `elapsed_seconds()` — thời gian đo thực tế của phiên."""
+        return self.elapsed_seconds()
 
     @classmethod
     def load(cls, run_dir: Path) -> "RunSession":
@@ -180,6 +238,12 @@ class RunSession:
         session.ended_at = str(data.get("ended_at", ""))
         duration = data.get("duration_seconds")
         session.duration_seconds = float(duration) if isinstance(duration, (int, float)) else None
+        # Thời gian tạm dừng (bản tool mới ghi). `meta.json` của bản tool cũ
+        # không có hai khoá này → 0.0 / "" nghĩa là phiên không hề bị tạm dừng,
+        # đúng như thực tế vì bản cũ không có tạm dừng thật.
+        paused = data.get("paused_seconds")
+        session.paused_seconds = float(paused) if isinstance(paused, (int, float)) else 0.0
+        session.pause_started_at = str(data.get("pause_started_at", "") or "")
         planned = data.get("planned_hours")
         session.planned_hours = float(planned) if isinstance(planned, (int, float)) else None
         session.broker = str(data.get("broker", ""))
@@ -614,6 +678,11 @@ def run_history_row(
         "duration_label": duration_label,
         "duration_hours": round(duration / 3600.0, 2) if duration else "",
         "duration_estimated": not bool(session.ended_at),
+        # Thời gian đã TẠM DỪNG: ưu tiên số trong `run_summary.csv` (con số đã
+        # ghi vào báo cáo), phiên của bản tool cũ không có khoá này thì lấy từ
+        # `meta.json` (cũng 0 vì bản cũ không có tạm dừng thật).
+        "paused_seconds": _as_float(summary.get("paused_seconds")) if summary.get(
+            "paused_seconds") not in (None, "") else round(session.paused_seconds, 3),
         "broker": session.broker,
         "subscribed_topics": "|".join(session.subscribed_topics),
         "stop_reason": session.stop_reason,

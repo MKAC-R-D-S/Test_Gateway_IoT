@@ -526,6 +526,48 @@ def main() -> int:
             check("LIÊN TỤC" in gap_text,
                   "cột 'kiểu ngắt quãng' render được kết luận hụt một mạch",
                   "nhận %r" % gap_text)
+
+            # --- nháy đúp ở bảng "Tổng hợp node" → theo dõi node đó ---------
+            # Chốt chống tái phát cho yêu cầu "click double vào node thì hiện ra
+            # bảng theo dõi node đó trọng tâm, nếu xong thì nhấn thoát ra để xem
+            # node khác": (a) nháy đúp phải bật theo dõi ĐÚNG UID của dòng đó,
+            # (b) tự chuyển sang trang "Node trọng tâm", (c) có đường quay lại
+            # bảng "Tổng hợp node" mà KHÔNG cần bỏ theo dõi.
+            for attr in ("_view_nodes", "focus_page", "btn_show_nodes", "_node_tabs"):
+                check(hasattr(monitor, attr),
+                      "tab Giám sát có %s (điều hướng node trọng tâm)" % attr)
+
+            monitor.model_nodes.reset_rows([{"node_uid": "0011223344556677"}])
+            monitor.edit_focus.setText("")
+            before = len(captured)
+            monitor._on_node_double_clicked(monitor.model_nodes.index(0, 0))
+            check(len(captured) == before + 1
+                  and captured[-1] == "0011223344556677",
+                  "nháy đúp dòng 'Tổng hợp node' bật theo dõi đúng UID",
+                  "nhận %r" % (captured[before:],))
+            check(monitor.edit_focus.text() == "0011223344556677",
+                  "nháy đúp điền UID vào ô 'UID node theo dõi'")
+            check(monitor.tables_tabs.currentWidget() is monitor.focus_page,
+                  "nháy đúp tự chuyển sang trang 'Node trọng tâm'")
+
+            monitor.show_node_table()
+            check(monitor.tables_tabs.currentWidget() is monitor._view_nodes,
+                  "nút 'Thoát ra' quay lại bảng 'Tổng hợp node'")
+            check(monitor.edit_focus.text() == "0011223344556677",
+                  "thoát ra KHÔNG bỏ theo dõi node đang xem")
+
+            monitor.show_focus_page()
+            check(monitor.tables_tabs.currentWidget() is monitor.focus_page,
+                  "show_focus_page() mở lại trang 'Node trọng tâm'")
+
+            # Dòng không có UID / index không hợp lệ phải bị bỏ qua, không crash.
+            monitor.model_nodes.reset_rows([{"node_uid": ""}])
+            guard = len(captured)
+            monitor._on_node_double_clicked(monitor.model_nodes.index(0, 0))
+            monitor._on_node_double_clicked(None)
+            check(len(captured) == guard,
+                  "nháy đúp dòng thiếu UID / index rỗng không phát signal")
+            monitor.model_nodes.reset_rows([])
         except Exception as exc:  # noqa: BLE001
             import traceback
             traceback.print_exc()

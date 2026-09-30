@@ -108,7 +108,7 @@ Mỗi lần chạy tạo `data/<YYYYMMDD_HHMMSS>_<suffix>/`:
 | `reports/correlation_summary.csv` | Tương quan MQTT ↔ ping theo window 60 s (phát hiện "mạng vẫn tốt mà mất dữ liệu"). |
 | `reports/mqtt_silence.csv` | Các window im lặng liên tiếp (nghi ngờ mất dữ liệu). |
 | `reports/alerts_summary.csv` | Đếm cảnh báo theo loại/mức. |
-| `reports/run_summary.csv` | Chốt 1 dòng: tổng bản tin, tỉ lệ thiếu, số reconnect, downtime, thời lượng, **`gateways_passed` / `gateways_failed` / `result` / `result_reason`** (xem §4 “Kết quả ĐẠT / KHÔNG ĐẠT”). |
+| `reports/run_summary.csv` | Chốt 1 dòng: tổng bản tin, tỉ lệ thiếu, số reconnect, downtime, thời lượng, **`gateways_passed` / `gateways_failed` / `result` / `result_reason`** (xem §4 “Kết quả ĐẠT / KHÔNG ĐẠT”). Cột `duration_seconds` là **thời gian đo được đã trừ tạm dừng**; tổng thời gian nghỉ nằm ở cột `paused_seconds`. |
 | `reports/gateway_result.csv` | **Kết quả ĐẠT / KHÔNG ĐẠT** — 1 dòng mỗi gateway + 1 dòng **TỔNG** ở cuối file; mỗi tiêu chí 1 cột `PASS` / `FAIL` / `N/A` (26 cột). Xem §4. |
 | `reports/focused_node_summary.csv` | **Node trọng tâm**: 1 dòng TỔNG + 1 dòng mỗi gateway — bắt hụt / bắn hụt, kèm **kiểu ngắt quãng** (`gap_runs`, `gap_largest`, `gap_pattern`). Chỉ sinh khi có node trọng tâm (§4 “Node trọng tâm”). |
 | `reports/focused_node_missing.csv` | Node trọng tâm: từng khoảng SEQ liên tiếp mà gateway không publish (bắt hụt), kèm mốc thời gian. |
@@ -286,7 +286,11 @@ Tính năng này trả lời câu hỏi: **với MỘT node, mỗi gateway bắt
 nhiêu bản tin?**
 
 Chọn node ở tab **Giám sát → Node trọng tâm** (ô nhập UID 16 hex, hoặc 24 hex với
-node cũ) rồi bấm **Theo dõi**; bảng cập nhật realtime. Khi chạy headless, đặt
+node cũ) rồi bấm **Theo dõi**; bảng cập nhật realtime. **Đường tắt trên GUI:** ở bảng
+con **Tổng hợp node**, **nháy đúp** một dòng → tool bật theo dõi node đó và tự chuyển
+sang trang *Node trọng tâm*. Bấm **◀ Thoát ra (Tổng hợp node)** để quay lại chọn node
+khác — **không** ngừng theo dõi (chỉ **Bỏ theo dõi** hoặc đổi sang node khác mới ngừng).
+Khi chạy headless, đặt
 `focused_node_enabled = true` + `focused_node_uid` trong `config/config.json` —
 tóm tắt được in cả lúc chạy và lúc kết thúc.
 
@@ -521,6 +525,47 @@ trong bộ đệm của `CsvSink` thì báo cáo bị **hụt đuôi**. Lỗi n�
 với báo cáo đã chốt; đúng 6 dòng cuối đó là phần bị cắt. Thứ tự hiện tại:
 `flush_all()` → `write_reports()` → `logs.stop()` → cập nhật `meta.json`.
 
+Cùng lý do, nút **📊 Ghi báo cáo ngay** (chốt báo cáo giữa chừng, **không** dừng
+phiên) cũng phải đợi bộ đệm rỗng. Trước đây nó gọi `logs.flush_all()` **đồng bộ
+trên thread GUI** trong khi thread phân tích vẫn đang bơm dữ liệu vào — GUI đứng
+hình và người dùng tưởng tool còn đang chạy/ping. Nay nó gọi
+`pipeline.flush_and_wait(timeout=120.0)`: việc flush chạy trên một thread nền
+(`csv-flush`), GUI chỉ **chờ bằng `threading.Event`** nên không bao giờ bị chặn
+cứng, và hết thời gian chờ thì ghi cảnh báo chứ không treo.
+
+### Tạm dừng phiên: đồng hồ đứng, ping ngừng (đã sửa)
+
+Nút **⏸ Tạm dừng** trước đây chỉ đổi cờ trạng thái, nên có ba hệ quả sai:
+
+1. **Đồng hồ vẫn chạy** — `RunSession.elapsed_seconds()` là `now − started_at` và
+   `MonitorPipeline` cộng dồn giờ tường từ `_started_monotonic`, nên thời gian nghỉ
+   bị tính vào **thời lượng phiên**, làm loãng mọi tỉ lệ khi so giữa các phiên.
+   `finish()` cũng chốt `duration_seconds` theo `ended_at − started_at`.
+2. **Tool vẫn ping** — vòng lặp `PingMonitor._run_target` chỉ kiểm tra `_stop`, nên
+   ICMP vẫn chạy đều và bộ đếm ping/s trên GUI vẫn nhảy.
+3. **Sinh dữ liệu giả khi tiếp tục** — cửa sổ im lặng và *cooldown* cảnh báo đều
+   tính theo giờ thật, nên vừa bấm **Tiếp tục** là có ngay loạt `NODE_SILENT` /
+   `GATEWAY_SILENT` cho quãng tool **cố ý** không nhận gì; và nếu lúc tạm dừng vẫn
+   phát `PingRecord` fail thì quãng nghỉ dài hơn `ping_down_threshold ×
+   ping_interval_seconds` sẽ bị ghi thành **cửa sổ downtime** trong
+   `gateway_downtime.csv`.
+
+Cách sửa (bất biến cần giữ nếu sửa tiếp):
+
+| Thành phần | Bất biến |
+|---|---|
+| `RunSession` | Có `paused_seconds` + `pause_started_at`; `mark_paused()` idempotent; `elapsed_seconds()` = giờ tường − `paused_seconds_now()` (**kể cả khoảng đang mở**, nên đồng hồ đứng ngay lúc bấm); `finish()` gọi `mark_resumed()` trước để **đóng nốt** khoảng đang mở rồi mới chốt `duration_seconds` |
+| `MonitorPipeline` | `pause()`/`resume()` khoá theo `time.monotonic()`; `resume()` trả về số giây đã nghỉ; `stats()`/`write_reports()` dùng `elapsed_seconds()`; `write_reports()` ghi thêm cột `paused_seconds` |
+| `PingMonitor` | `pause()` set `_paused` (đánh thức cả `_sleep`); trong vòng lặp, **kết quả ping xong sau khi đã tạm dừng/dừng bị BỎ**, không tăng bộ đếm, không `_dispatch` → **không có `PingRecord` giả** nào được sinh |
+| Khi **Tiếp tục** | `PingTracker.reset_failure_streaks()` xoá `consecutive_failures` (giữ `max_consecutive_failures`) để quãng nghỉ không bị ghép thành chuỗi fail; `AnomalyDetector.shift_baselines(secs)` đẩy `last_seen_dt`, `_last_gateway_seen`, `_last_alert_at` (và **không** đụng `_alerts`) |
+| Báo cáo | `run_summary.csv` và `meta.json` đều có `paused_seconds`; `duration_seconds` = **thời gian đo được** (đã trừ tạm dừng) nên so sánh giữa các phiên vẫn công bằng |
+
+GUI phản ánh trạng thái thật: thẻ **Thời gian chạy** hiện
+`⏸ (đang tạm dừng, đã nghỉ …)`, thẻ **Ping gateway** thêm `⏸ KHÔNG chạy ICMP`,
+còn trang **Tổng kết** của tab Lịch sử phiên tách riêng *Thời lượng đo được (giây)*
+và *Thời gian tạm dừng (giây)*. Phiên cũ (chưa có khoá tạm dừng) đọc lên mặc định
+`0.0` nên tương thích ngược. Test: `tests/test_pause.py` (15 ca).
+
 ## 5. Ràng buộc thiết kế (vì sao tool "chịu" được 3–4 ngày)
 
 1. **CSV là source of truth**, GUI chỉ là lớp xem. Đóng cửa sổ không làm mất dữ liệu.
@@ -565,7 +610,8 @@ python tests/smoke_test.py
 
 # 2) Unit test (pytest) — gồm tests/test_focused_node.py cho bắt hụt / bắn hụt,
 #    tests/test_gateway_result.py cho kết quả ĐẠT / KHÔNG ĐẠT từng tiêu chí,
-#    và tests/test_gateway_rescore.py (24 ca) cho việc chấm lại phiên cũ
+#    tests/test_gateway_rescore.py (24 ca) cho việc chấm lại phiên cũ,
+#    và tests/test_pause.py (15 ca) cho tạm dừng: đồng hồ đứng + ngừng ICMP
 python -m pytest tests/ -q
 
 # 3) GUI: import mọi module ui/*, dựng MainWindow rồi đóng (offscreen)
@@ -802,6 +848,46 @@ Chỉ build exe:
 ```powershell
 python -m PyInstaller --clean --noconfirm TestGatewayIoT.spec
 ```
+
+#### 9.1.1. Quy trình đầy đủ mỗi khi sửa code
+
+Xem bản có giải thích chi tiết ở
+[`HUONG_DAN_SU_DUNG.md` §11.0](HUONG_DAN_SU_DUNG.md#110-quy-trình-build-lại-exe-mỗi-khi-sửa-code-5-bước).
+Tóm tắt:
+
+```powershell
+# 0) Tắt exe/GUI đang chạy (nếu không Windows khoá file)
+cd C:\MKAC\Test_many_gateway
+
+# 1) Thử bản mã nguồn trước cho nhanh
+$env:PYTHONUTF8 = "1"; c:\python314\python.exe main.py
+
+# 2) Test phải xanh trước khi build
+$env:PYTHONUTF8 = "1"; c:\python314\python.exe -m pytest tests/ -q
+$env:PYTHONUTF8 = "1"; c:\python314\python.exe tests\smoke_test.py
+$env:PYTHONUTF8 = "1"; $env:QT_QPA_PLATFORM = "offscreen"; c:\python314\python.exe tests\gui_smoke_test.py
+
+# 3) Build exe + gói phát hành
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_release.ps1 -Python c:\python314\python.exe
+
+# 4) Kiểm tra gói (phải in bad=0)
+.\release\1.0.0\TestGatewayIoT.exe --version
+
+# 5) Commit + push
+git add -A; git commit -m "..."; git push; git rev-parse origin/main
+```
+
+**Bẫy thường gặp:**
+
+- PyInstaller **trả exit code 1 kể cả khi build thành công** → căn cứ vào dòng
+  `Build complete!`, **không** căn cứ exit code.
+- Gọi `c:\python314\python.exe -m PyInstaller` (thư mục `Scripts\` thường không có trên PATH).
+- Sửa **chỉ** `.md` / `docs/` / `config/*.json` → dùng `-SkipBuild` là đủ (script chỉ gom
+  lại + cập nhật `release.json` + ZIP). Sửa file `.py` → **phải** full build.
+- File `.ps1` **phải giữ ASCII**: PowerShell 5.1 đọc `.ps1` không BOM theo ANSI, chữ Việt
+  sẽ vỡ. Tiếng Việt chỉ nằm trong `.md` và `.py` (UTF-8).
+- `git push` ghi tiến trình ra **stderr** → PowerShell hiện `NativeCommandError` đỏ dù đã
+  push thành công; xác minh bằng `git rev-parse origin/main`.
 
 ### 9.2. Sản phẩm
 

@@ -3,7 +3,7 @@
     "tool":  "Test Gateway IoT",
     "cli":  "test_gateway_iot",
     "version":  "1.0.0",
-    "built_at":  "2026-09-30T08:24:22Z",
+    "built_at":  "2026-09-30T09:38:51Z",
     "platform":  "windows-x64",
     "entrypoint":  "TestGatewayIoT.exe",
     "python_needed":  false,
@@ -21,8 +21,8 @@
     "files":  [
                   {
                       "path":  "TestGatewayIoT.exe",
-                      "bytes":  45838767,
-                      "sha256":  "189ffe3102a8d132e90ac389bbc93af38ef9fbfbaa9ff5f31652ec2b15b43673"
+                      "bytes":  45853991,
+                      "sha256":  "eca9b9281f98c134a1257dbd2e45ce97a4d7c96bd74fb60618fd5526db4be284"
                   },
                   {
                       "path":  "config/config.json",
@@ -41,13 +41,13 @@
                   },
                   {
                       "path":  "HUONG_DAN_SU_DUNG.md",
-                      "bytes":  36498,
-                      "sha256":  "ce2e57748881662a2e18fb1f8efe344d96dcd16f5f7bc4b9165c20354fe74786"
+                      "bytes":  44534,
+                      "sha256":  "7995a04a06182150e1800ddc261315bf42f02360375db3a900f73f1605a71fe5"
                   },
                   {
                       "path":  "README.md",
-                      "bytes":  59775,
-                      "sha256":  "13c91501f87f415e9729473bfd9479f3eaa7d541b4cf115428a8a53654adac0f"
+                      "bytes":  66133,
+                      "sha256":  "ac28bff8a1a41ac3a2498c56722a80f6d1cf5fd76d759e22d4cb34c7c6ddbfc5"
                   }
               ]
 }

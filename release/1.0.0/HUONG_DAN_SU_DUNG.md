@@ -257,9 +257,9 @@ flowchart LR
 ```
 
 1. **Cấu hình** broker + gateway (§3).
-2. (Khuyến nghị) Tick **Node trọng tâm** ở tab Giám sát — nhập UID một node đại diện
-   để đo **bắt hụt** (gateway khác nghe được mà gateway này không publish) và **bắn hụt**
-   (publish trễ). Xem §5.6.
+2. (Khuyến nghị) Bật **Node trọng tâm** để đo **bắt hụt** (gateway khác nghe được
+   mà gateway này không publish) và **bắn hụt** (publish trễ). Cách nhanh nhất: ở
+   bảng **Tổng hợp node**, **nháy đúp** vào node muốn theo dõi. Xem §5.6.
 3. (Không bắt buộc) Gõ **Tên phiên** ở toolbar, ví dụ *"test lại GW 4F9199"*.
 4. Bấm **▶ Bắt đầu test**.
 5. Kiểm tra sức khoẻ định kỳ ở tab **📡 Giám sát** (§5.1). Nếu chạy headless thì xem
@@ -283,18 +283,29 @@ Toolbar trên cùng:
 | Nút | Việc nó làm |
 |---|---|
 | **▶ Bắt đầu test** | Mở phiên mới, bắt đầu nghe MQTT + ping |
-| **⏸ Tạm dừng** | Ngừng ghi (dữ liệu đang chờ vẫn được xử lý) |
+| **⏸ Tạm dừng** | Nghỉ giữa chừng: **ngừng ghi bản tin, ngừng chạy ICMP, đồng hồ đứng**. Vẫn giữ kết nối broker để tiếp tục tức thì |
 | **■ Dừng & ghi báo cáo** | Kết thúc phiên, chốt toàn bộ báo cáo |
 | **📊 Ghi báo cáo ngay** | Chốt báo cáo tạm mà không dừng |
 | **📂 Mở thư mục log** | Mở thư mục dữ liệu phiên hiện tại |
 | **Tên phiên** | Đặt tên trước khi chạy (không bắt buộc) |
+
+> **Nút "⏸ Tạm dừng" là thật, không phải chỉ đổi nhãn.** Khi tạm dừng:
+>
+> - Tool **không ping** nữa — bộ đếm ping (thành công / thất bại / ping/s) **đứng yên**,
+>   không sinh bản ghi ping nào. Nhờ vậy khoảng nghỉ **không** bị ghi thành downtime giả.
+> - **Đồng hồ đứng**: thẻ *Thời gian chạy* hiện `⏸ (đang tạm dừng, đã nghỉ ...)`, và
+>   thời gian nghỉ **không** được tính vào `duration_seconds` của phiên.
+> - Bộ phát hiện im lặng được **dịch mốc** khi tiếp tục, nên không có loạt cảnh báo
+>   `NODE_SILENT` / `GATEWAY_SILENT` giả cho quãng tool cố ý không nhận gì.
+> - Bấm **▶ Tiếp tục** để chạy lại; mọi thứ tiếp tục từ chỗ dừng, có ghi log rõ
+>   đã nghỉ bao nhiêu phút.
 
 **8 thẻ chỉ số** (cập nhật mỗi 500 ms):
 
 | Thẻ | Cho biết |
 |---|---|
 | **Trạng thái** | IDLE / RUNNING / PAUSED / STOPPED / ERROR |
-| **Thời gian chạy** | Đã chạy bao lâu + giờ bắt đầu |
+| **Thời gian chạy** | Đã chạy bao lâu (**đã trừ thời gian tạm dừng**) + giờ bắt đầu. Khi tạm dừng hiện `⏸ tạm dừng — đã nghỉ ...` |
 | **Kết nối MQTT** | Đã kết nối chưa, số lần reconnect, uptime |
 | **Bản tin nhận được** | Tổng số + tách theo DATA / INFO / ERROR / LOG |
 | **Node/Gateway** | Số node phát hiện được + số gateway cấu hình |
@@ -307,7 +318,8 @@ Toolbar trên cùng:
 - **Bản tin trực tiếp** — các bản tin vừa nhận (bị giới hạn số dòng cho nhẹ GUI;
   dữ liệu đầy đủ luôn nằm trong CSV).
 - **Tổng hợp node** — 1 dòng / node: số gói, SEQ đầu/cuối, thiếu/trùng/sai thứ tự,
-  tỉ lệ nhận.
+  tỉ lệ nhận. **Nháy đúp một dòng để theo dõi node đó** ở trang *Node trọng tâm*
+  (xem §5.6).
 - **Cảnh báo** — node im lặng, gateway im lặng, tỉ lệ thiếu cao…
 - **Downtime** — **chi tiết từng khoảng gateway mất kết nối ping** (xem §6.2).
 - **Node trọng tâm** — bắt hụt / bắn hụt của node đang theo dõi (§5.6).
@@ -352,6 +364,12 @@ ngang** (mất điện / kill / đóng console).
 đã cấu hình, số gateway nghe được, tổng bản tin, số node, gói thiếu, ping fail,
 số báo cáo, dung lượng.
 
+> **Cột "thời lượng" là thời gian ĐO ĐƯỢC, đã trừ mọi quãng tạm dừng.** Trang
+> **Tổng kết** trong tab này tách rõ hai con số: *Thời lượng đo được (giây)*
+> (`duration_seconds`) và *Thời gian tạm dừng (giây)* (`paused_seconds`). Nhờ vậy
+> các phiên có tạm dừng vẫn so sánh được với nhau — tỉ lệ phần trăm không còn bị
+> pha loãng bởi thời gian tool cố ý không đo.
+
 **Nút:**
 
 | Nút | Việc nó làm |
@@ -386,7 +404,18 @@ Form bị **khoá trong lúc phiên đang chạy** (đổi ngưỡng giữa phi�
 
 ### 5.6. Node trọng tâm — đo "bắt hụt" và "bắn hụt"
 
-Nhập **UID một node** rồi bật theo dõi (ở tab Giám sát → *Node trọng tâm*).
+**Cách nhanh nhất — nháy đúp:**
+
+1. Ở tab **📡 Giám sát** → bảng con **Tổng hợp node**.
+2. **Nháy đúp** vào dòng của node muốn soi. Tool **bật theo dõi luôn** node đó và
+   **tự chuyển** sang trang **Node trọng tâm** — không cần copy UID thủ công.
+3. Xem xong, bấm **◀ Thoát ra (Tổng hợp node)** để quay lại bảng node và chọn node
+   khác. **Thoát ra KHÔNG bỏ theo dõi**: số liệu bắt hụt / bắn hụt vẫn tiếp tục
+   được thu cho node đang chọn, và ô *UID node theo dõi* giữ nguyên UID.
+
+**Cách nhập tay:** ở trang *Node trọng tâm*, gõ UID vào ô **UID node theo dõi** rồi
+bấm **Theo dõi** (hoặc Enter). Bấm **Bỏ theo dõi** để ngừng hẳn.
+
 Tool so bản tin của node đó trên **mọi gateway**:
 
 - **BẮT HỤT** — node đã phát (gateway khác nghe được) mà gateway này **không publish**.
@@ -395,6 +424,9 @@ Tool so bản tin của node đó trên **mọi gateway**:
 
 Đây là bằng chứng **trực tiếp** phân biệt "gateway yếu" với "node không phát" — quan
 trọng khi kết luận. Kết quả ghi vào `reports/focused_node_*.csv`.
+
+> **Đổi node giữa phiên sẽ XOÁ số liệu của node cũ** (không trộn hai node vào một
+> bảng). Nếu muốn giữ số liệu node đang xem, đừng nháy đúp sang node khác.
 
 ---
 
@@ -452,12 +484,19 @@ xuất ra**, chỉ **không** dùng để chấm ĐẠT/KHÔNG ĐẠT (xem §6.3
 - `reports/gateway_downtime.csv` — bảng chi tiết theo gateway.
 - `reports/ping_summary.csv` — cột `downtime_events`, `downtime_seconds` theo gateway.
 - `reports/run_summary.csv` — cột `downtime_events`, `downtime_seconds` cho cả phiên.
+  Cột `duration_seconds` là **thời gian đo thực tế**; cột `paused_seconds` ghi riêng
+  tổng thời gian đã tạm dừng. Cộng hai cột này mới ra độ dài theo giờ tường.
 - `reports/gateway_result.csv` — cột `downtime_events`, `downtime_seconds` (**tham khảo**).
 
 **Cách hoạt động:** cứ mỗi `ping_interval_seconds` (mặc định 10 s) tool ping song
 song từng gateway. Ping fail **liên tiếp** `ping_down_threshold` lần (mặc định 2) mới
 coi là **DOWN** → mở một cửa sổ downtime. Ping thành công trở lại → **đóng** cửa sổ và
 ghi lại `duration_seconds`. Nếu tool dừng khi cửa sổ còn mở, nó ghi trạng thái `ONGOING`.
+
+> **Lúc TẠM DỪNG tool không ping**, nên khoảng nghỉ không bao giờ bị tính thành downtime.
+> Khi **Tiếp tục**, chuỗi ping fail trước đó được xoá (không cộng dồn qua quãng nghỉ) —
+> nếu không, hai lần fail trước khi nghỉ + một lần fail sau khi chạy lại sẽ bị ghép
+> thành một cửa sổ mất kết nối mà thực tế không hề có.
 
 > **Quan trọng:** downtime là **tổng thời gian ping fail**, không phải "gateway hỏng".
 > Một gateway có MQTT **hoàn toàn khoẻ** vẫn tích luỹ downtime nếu **ICMP bị tường lửa
@@ -609,6 +648,116 @@ máy không có PyQt5.
 ## 11. Đóng gói bản phát hành (`.exe` + JSON)
 
 Dành cho người **phát triển** muốn tạo file `.exe` để gửi cho đồng nghiệp hoặc up lên git.
+
+> **Bạn sửa code xong và muốn ra `.exe` mới?** Làm theo **§11.0** bên dưới —
+> chỉ 5 bước, copy/paste được. §11.1 trở đi là giải thích chi tiết từng phần.
+
+### 11.0. Quy trình build lại `.exe` mỗi khi sửa code (5 bước)
+
+**Bước 0 — Đóng tool đang chạy.** Nếu `TestGatewayIoT.exe` (hoặc GUI từ mã nguồn) đang
+mở thì **phải tắt trước**, nếu không Windows khoá file và bước copy sẽ báo
+`The process cannot access the file`.
+
+Mở **PowerShell** và vào thư mục repo:
+
+```powershell
+cd C:\MKAC\Test_many_gateway
+```
+
+**Bước 1 — Chạy bản mã nguồn để thử ngay (nhanh nhất, không cần build).**
+Sửa code xong thì thử ở đây trước — build exe mất ~1 phút nên đừng build vội:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+c:\python314\python.exe main.py
+```
+
+*(Nếu `python` đã có trên PATH thì dùng `python main.py`. Biến `PYTHONUTF8` là bắt buộc,
+thiếu nó log tiếng Việt sẽ ném `UnicodeEncodeError`.)*
+
+**Bước 2 — Chạy test.** Đừng build khi test còn đỏ:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+c:\python314\python.exe -m pytest tests/ -q
+c:\python314\python.exe tests\smoke_test.py
+$env:QT_QPA_PLATFORM = "offscreen"
+c:\python314\python.exe tests\gui_smoke_test.py
+Remove-Item Env:QT_QPA_PLATFORM
+```
+
+Cả ba phải xanh: `pytest` báo số test **passed**, hai smoke test in
+`KẾT QUẢ: TẤT CẢ ... KIỂM TRA ĐẠT`.
+
+**Bước 3 — Build lại exe + gói phát hành (một lệnh duy nhất):**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_release.ps1 -Python c:\python314\python.exe
+```
+
+Script tự làm hết: đọc phiên bản từ `core/__init__.py` → PyInstaller build → copy
+`config/`, `docs/`, `HUONG_DAN_SU_DUNG.md`, `README.md` vào `release\1.0.0\` →
+sinh `release.json` → nén `.zip`.
+
+> **Lưu ý quan trọng:** PyInstaller **trả mã thoát 1 kể cả khi build thành công**.
+> Đừng nhìn exit code — hãy tìm dòng **`Build complete!`** trong log. Build xong sẽ
+> thấy `Build complete!` rồi danh sách file kèm SHA-256.
+
+**Bước 4 — Kiểm tra gói vừa sinh (tuỳ chọn nhưng nên làm).** Đoạn lệnh dưới đối chiếu
+lại toàn bộ SHA-256 trong manifest, in ra `bad=0` nghĩa là gói nguyên vẹn:
+
+```powershell
+cd release\1.0.0
+$m = Get-Content .\release.json -Raw | ConvertFrom-Json
+$bad = 0
+foreach ($f in $m.files) {
+  $h = (Get-FileHash $f.path -Algorithm SHA256).Hash.ToLower()
+  if ($h -ne $f.sha256 -or (Get-Item $f.path).Length -ne $f.bytes) {
+    Write-Host "MISMATCH: $($f.path)"; $bad++
+  }
+}
+Write-Host "bad=$bad"
+cd ..\..
+```
+
+Và thử chạy chính file exe vừa build:
+
+```powershell
+.\release\1.0.0\TestGatewayIoT.exe --version   # in "test_gateway_iot 1.0.0"
+```
+
+**Bước 5 — Commit + push.** Thư mục `release/1.0.0/` **được commit** (đó chính là gói
+để gửi/up git); file `.zip` thì bị `.gitignore` bỏ qua:
+
+```powershell
+git add -A
+git commit -m "fix: mo ta ngan gon thay doi"
+git push
+git rev-parse origin/main     # phải in ra hash mới nhất = đã push thành công
+```
+
+> `git push` in tiến trình ra **stderr**, nên PowerShell 5.1 hiện dòng chữ đỏ
+> `NativeCommandError` **dù push đã thành công**. Cứ kiểm tra bằng `git rev-parse origin/main`.
+
+**Mẹo: sửa gì cần build, sửa gì không?**
+
+| Bạn vừa sửa | Cần làm gì |
+|---|---|
+| File `.py` bất kỳ trong `core/`, `ui/`, `runtime/`, `storage/`, `analytics/`, `main.py` | **Full build** (Bước 3, không có `-SkipBuild`) |
+| Chỉ sửa `.md`, `docs/`, `config/*.json` | `-SkipBuild` là đủ: script chỉ gom lại và cập nhật manifest/ZIP: <br>`.\tools\build_release.ps1 -SkipBuild -Python c:\python314\python.exe` |
+| Chỉ muốn build exe, không gom gói/ZIP | `python -m PyInstaller --clean --noconfirm TestGatewayIoT.spec` — kết quả ở `dist\TestGatewayIoT.exe` |
+
+**Nhắc lại vài điểm dễ sai:**
+
+- **File `.ps1` phải giữ ASCII.** PowerShell 5.1 đọc file `.ps1` không có BOM theo
+  bảng mã ANSI, nên chữ Việt trong script sẽ vỡ. Tiếng Việt chỉ để trong `.md` và
+  trong file `.py` (UTF-8).
+- **`c:\python314\python.exe -m PyInstaller`**, không gọi `pyinstaller` trực tiếp —
+  thư mục `Scripts\` thường **không có** trên PATH.
+- Bản exe **tự bật UTF-8** (`force_utf8_console()` trong `main.py`), nên chạy exe
+  **không** cần `$env:PYTHONUTF8`; chỉ chạy **từ mã nguồn** mới cần.
+- `build/` và `dist/` là trung gian, đã bị `.gitignore`; `TestGatewayIoT.spec` là
+  **mã nguồn build** nên phải commit.
 
 ### 11.1. Một lệnh duy nhất
 

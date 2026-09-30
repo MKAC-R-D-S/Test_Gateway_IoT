@@ -215,6 +215,21 @@ class MonitorPipeline:
         self._last_merge_flush = 0.0
         self._merge_flush_interval = MERGE_FLUSH_INTERVAL_SECONDS
         self._started_monotonic = 0.0
+        # --- kế toán THỜI GIAN TẠM DỪNG ------------------------------------
+        # `_paused_total`  = tổng giây của các khoảng tạm dừng ĐÃ ĐÓNG.
+        # `_pause_started` = mốc monotonic của khoảng tạm dừng ĐANG mở (0 = không).
+        # Nhờ hai biến này `elapsed_seconds` và cột `duration_seconds` trong
+        # `run_summary.csv` là THỜI GIAN ĐO THỰC TẾ, không phải thời gian treo máy.
+        self._paused_total = 0.0
+        self._pause_started = 0.0
+        # --- luồng chốt CSV nền (nút "Ghi báo cáo ngay") --------------------
+        # `flush_all()` phải CHỜ sink ghi hết queue; làm việc đó trên luồng GUI
+        # làm cửa sổ đứng hình, người dùng tưởng tool "vẫn chạy ngầm". Chốt ở
+        # luồng riêng rồi mới ghi báo cáo → GUI chỉ bị chặn ở phần ghi file.
+        self._flush_lock = threading.Lock()
+        self._flush_thread: Optional[threading.Thread] = None
+        self._flush_waiters: List[threading.Event] = []
+        self._flushing = False
         self._analysed = 0
         self._node_keys: set = set()
         self.last_alert: Optional[AlertRecord] = None
@@ -225,10 +240,94 @@ class MonitorPipeline:
             return
         self._stop.clear()
         self._started_monotonic = time.monotonic()
+        self._paused_total = 0.0
+        self._pause_started = 0.0
         self.counters.started_at = datetime.now().astimezone().isoformat(timespec="seconds")
         self._thread = threading.Thread(target=self._run, name="analyse", daemon=True)
         self._thread.start()
         log.info("Pipeline phân tích đã khởi động (run_id=%s)", self.run_id or "-")
+
+    # -------------------------------------------------------- tạm dừng phiên
+    def pause(self) -> None:
+        """Bắt đầu KHÔNG tính thời gian vào `elapsed_seconds` (idempotent)."""
+        if self._pause_started:
+            return
+        self._pause_started = time.monotonic()
+
+    def resume(self) -> float:
+        """Kết thúc khoảng tạm dừng, trả về số giây của khoảng đó (0 nếu không)."""
+        if not self._pause_started:
+            return 0.0
+        paused = max(0.0, time.monotonic() - self._pause_started)
+        self._paused_total += paused
+        self._pause_started = 0.0
+        return paused
+
+    def paused_seconds(self) -> float:
+        """Tổng giây đã tạm dừng, kể cả khoảng đang mở."""
+        total = self._paused_total
+        if self._pause_started:
+            total += max(0.0, time.monotonic() - self._pause_started)
+        return max(0.0, total)
+
+    def shift_baselines(self, seconds: float) -> None:
+        """Dịch mốc thời gian của bộ phát hiện cảnh báo tới `seconds` giây.
+
+        Gọi khi tiếp tục sau tạm dừng (xem `MonitorRunner.resume`); nếu không,
+        lần quét định kỳ đầu tiên sau khi tiếp tục sẽ thấy "node im lặng" đúng
+        bằng khoảng tạm dừng và sinh cảnh báo giả.
+        """
+        if seconds <= 0:
+            return
+        try:
+            self.detector.shift_baselines(seconds)
+            self._last_timeout_check = 0.0
+        except Exception:  # noqa: BLE001 - không được làm chết pipeline
+            log.exception("Lỗi khi dịch mốc cảnh báo")
+
+    def elapsed_seconds(self) -> float:
+        """Thời gian pipeline đã chạy THỰC TẾ (đã trừ thời gian tạm dừng)."""
+        if not self._started_monotonic:
+            return 0.0
+        return max(0.0, time.monotonic() - self._started_monotonic - self.paused_seconds())
+
+    def flush_and_wait(self, timeout: float = 60.0) -> bool:
+        """Chốt hết dòng CSV đang chờ trong queue, chờ ở LUỒNG NỀN.
+
+        Vì sao không gọi thẳng `logs.flush_all()`: hàm đó chờ sink ghi hết queue;
+        với phiên nhiều gateway, queue có thể vài chục nghìn dòng nên gọi trên
+        luồng GUI làm cửa sổ đứng hình ngay sau khi bấm "Ghi báo cáo ngay".
+        Ở đây chỉ chờ tối đa `timeout` giây rồi trả về — ghi báo cáo vẫn đọc
+        file trên đĩa nên phần đã chốt được là đủ dùng.
+        """
+        waiters: List[threading.Event] = []
+        waiter = threading.Event()
+        with self._flush_lock:
+            if self._flushing and self._flush_thread is not None:
+                self._flush_waiters.append(waiter)
+            else:
+                self._flush_waiters.append(waiter)
+                self._flushing = True
+                self._flush_thread = threading.Thread(
+                    target=self._flush_worker, name="csv-flush", daemon=True
+                )
+                self._flush_thread.start()
+            waiters.append(waiter)
+        return waiter.wait(timeout)
+
+    def _flush_worker(self) -> None:
+        """Chốt CSV rồi đánh thức MỌI lời gọi `flush_and_wait` đang chờ."""
+        try:
+            self.logs.flush_all()
+        except Exception:  # noqa: BLE001 - chốt hụt không được làm chết pipeline
+            log.exception("Lỗi khi chốt CSV ở luồng nền")
+        with self._flush_lock:
+            waiters = self._flush_waiters
+            self._flush_waiters = []
+            self._flushing = False
+            self._flush_thread = None
+        for waiter in waiters:
+            waiter.set()
 
     def stop(self, timeout: float = 15.0) -> None:
         """Dừng pipeline: xử lý nốt queue rồi đóng downtime window còn mở."""
@@ -315,7 +414,7 @@ class MonitorPipeline:
 
     def stats(self, mqtt_stats: Optional[Dict[str, Any]] = None,
               ping_stats: Optional[Dict[str, Any]] = None) -> PipelineStats:
-        elapsed = time.monotonic() - self._started_monotonic if self._started_monotonic else 0.0
+        elapsed = self.elapsed_seconds()
         return PipelineStats(
             counters=dict(vars(self.counters)),
             seq_nodes=self.seq.state_count(),
@@ -861,11 +960,11 @@ class MonitorPipeline:
                 "run_id": self.run_id,
                 "session_start": self.counters.started_at,
                 "session_end": datetime.now().astimezone().isoformat(timespec="seconds"),
-                "duration_seconds": round(
-                    time.monotonic() - self._started_monotonic, 3
-                )
-                if self._started_monotonic
-                else "",
+                # THỜI GIAN ĐO THỰC TẾ của phiên (đã trừ thời gian tạm dừng).
+                # Kèm `paused_seconds` để báo cáo giải thích được vì sao thời
+                # lượng nhỏ hơn khoảng cách giữa `session_start` và `session_end`.
+                "duration_seconds": round(self.elapsed_seconds(), 3),
+                "paused_seconds": round(self.paused_seconds(), 3),
                 "broker": "%s:%d" % (self.config.mqtt_host, self.config.mqtt_port),
                 "subscribed_topics": "|".join(self.config.effective_subscribe_topics()),
                 # `gateway_names` là index biến thể (nhiều khoá / 1 gateway) nên

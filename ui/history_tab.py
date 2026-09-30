@@ -224,7 +224,11 @@ SUMMARY_FIELDS: List[Tuple[str, str]] = [
     ("run_id", "Mã phiên"),
     ("session_start", "Bắt đầu"),
     ("session_end", "Kết thúc"),
-    ("duration_seconds", "Thời lượng (giây)"),
+    # `duration_seconds` là THỜI GIAN ĐO THỰC TẾ: đã trừ mọi khoảng tạm dừng, nên
+    # `session_end − session_start` có thể lớn hơn. Cột `paused_seconds` ngay dưới
+    # cho biết đã tạm dừng bao nhiêu giây để đối chiếu hai con số.
+    ("duration_seconds", "Thời lượng đo được (giây)"),
+    ("paused_seconds", "Thời gian tạm dừng (giây)"),
     ("broker", "Broker"),
     ("subscribed_topics", "Topic đã subscribe"),
     ("total_messages", "Tổng bản tin MQTT nhận được"),
@@ -436,6 +440,7 @@ PAGE_FORMATTERS = {
     "delay_min_seconds": lambda v: fmt_float(v, 1),
     "delay_max_seconds": lambda v: fmt_float(v, 1),
     "duration_seconds": lambda v: fmt_float(v, 1),
+    "paused_seconds": lambda v: fmt_float(v, 1),
     "downtime_seconds": lambda v: fmt_float(v, 1),
     "recovered": fmt_bool,
 }

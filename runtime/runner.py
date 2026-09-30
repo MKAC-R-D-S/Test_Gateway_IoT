@@ -248,16 +248,64 @@ class MonitorRunner:
         return self.session
 
     def pause(self) -> None:
+        """TẠM DỪNG thật: ngừng ghi MQTT **và** ngừng chạy ICMP, đồng hồ đứng.
+
+        Trước đây hàm này chỉ đổi cờ trạng thái: `PingMonitor` vẫn chạy `ping`
+        mỗi `ping_interval_seconds` (nên thẻ "Ping" trên GUI vẫn nhảy số) và mọi
+        đồng hồ vẫn tính theo giờ tường. Nay:
+          - MQTT: vẫn giữ kết nối broker nhưng bản tin bị bỏ (đếm vào
+            `queue_dropped`) — xem `_forward()`.
+          - ICMP: `PingMonitor.pause()` → không còn tiến trình `ping` nào chạy.
+          - Thời gian: `RunSession.mark_paused()` + `pipeline.pause()` nên
+            "Thời lượng" của phiên/`run_summary.csv` không còn cộng khoảng này.
+        """
         if self._state.state != STATE_RUNNING:
             return
         self._set_state(STATE_PAUSED)
-        log.info("Tạm dừng ghi dữ liệu (vẫn giữ kết nối broker)")
+        if self.session is not None:
+            self.session.mark_paused()
+        if self.pipeline is not None:
+            self.pipeline.pause()
+        if self.pinger is not None:
+            try:
+                self.pinger.pause()
+            except Exception:  # noqa: BLE001 - tạm dừng hụt không được làm đứng GUI
+                log.exception("Lỗi khi tạm dừng ping monitor")
+        log.info(
+            "Đã TẠM DỪNG: không ghi bản tin, không chạy ICMP, đồng hồ đứng "
+            "(vẫn giữ kết nối broker)"
+        )
 
     def resume(self) -> None:
+        """Tiếp tục sau tạm dừng, KHÔNG sinh dữ liệu/downtime giả cho khoảng đã nghỉ."""
         if self._state.state != STATE_PAUSED:
             return
+        paused = 0.0
+        if self.pipeline is not None:
+            paused = self.pipeline.resume()
+        if self.session is not None:
+            self.session.mark_resumed()
+        if self.pinger is not None:
+            try:
+                self.pinger.resume()
+            except Exception:  # noqa: BLE001
+                log.exception("Lỗi khi chạy lại ping monitor")
+        if self.pipeline is not None:
+            # Chặn CẢNH BÁO GIẢ: cửa sổ im lặng của node/gateway và cooldown cảnh
+            # báo được đẩy tới tương lai đúng bằng thời gian đã tạm dừng.
+            try:
+                self.pipeline.shift_baselines(paused)
+            except Exception:  # noqa: BLE001
+                log.exception("Lỗi khi dịch mốc cảnh báo sau tạm dừng")
+            # Chặn DOWNTIME GIẢ: chuỗi ping fail trước khi tạm dừng không còn
+            # "liên tiếp" nữa → không cộng dồn với lần fail đầu sau khi tiếp tục.
+            try:
+                self.pipeline.ping_tracker.reset_failure_streaks()
+            except Exception:  # noqa: BLE001
+                log.exception("Lỗi khi xoá chuỗi ping fail sau tạm dừng")
         self._set_state(STATE_RUNNING)
-        log.info("Tiếp tục ghi dữ liệu")
+        log.info("TIẾP TỤC: ghi bản tin và chạy lại ICMP (đã tạm dừng %.1f phút)",
+                 paused / 60.0)
 
     def stop(self, reason: str = "Người dùng dừng") -> Dict[str, str]:
         """Dừng sạch và ghi báo cáo. Idempotent — gọi nhiều lần vẫn an toàn."""
@@ -345,6 +393,10 @@ class MonitorRunner:
                     "run_dir": str(self.session.run_dir),
                     "started_at": self.session.started_at,
                     "elapsed_seconds": self.session.elapsed_seconds(),
+                    # Đồng hồ ĐANG ĐỨNG vì phiên tạm dừng (GUI hiện "(tạm dừng)"),
+                    # và tổng thời gian đã tạm dừng (kể cả khoảng đang mở).
+                    "paused": self._state.state == STATE_PAUSED,
+                    "paused_seconds": self.session.paused_seconds_now(),
                     "planned_hours": self.session.planned_hours,
                     "gateways_monitored": self.session.gateways_monitored,
                     "broker": self.session.broker,
@@ -364,11 +416,26 @@ class MonitorRunner:
         if self.pipeline is None or self.logs is None:
             return {}
         try:
-            self.logs.flush_all()
-            written = self.pipeline.write_reports(
-                self.session,
-                extra={"reconnects": self.mqtt.stats.reconnects if self.mqtt else 0},
-            )
+            # Chờ CSV ghi hết queue — nhưng ĐỢI Ở LUỒNG NỀN (`flush_and_wait`),
+            # không chặn luồng GUI. Từ đó cửa sổ không còn đứng hình khi bấm
+            # "Ghi báo cáo ngay"; đây là phần "khi dừng ghi báo cáo… tool vẫn ping"
+            # mà người dùng thấy trước đây (thực chất là GUI bị treo).
+            flushed = self.pipeline.flush_and_wait(timeout=120.0)
+            if not flushed:
+                log.warning(
+                    "Hết thời gian chờ chốt CSV — báo cáo có thể thiếu phần đuôi phiên"
+                )
+            # Ghi báo cáo trong lúc ĐANG TẠM DỪNG: phải nói rõ số liệu là của phần
+            # đã đo, và nhắc rằng ICMP cũng đang nghỉ (không phải gateway hỏng).
+            extra: Dict[str, Any] = {
+                "reconnects": self.mqtt.stats.reconnects if self.mqtt else 0
+            }
+            if self._state.state == STATE_PAUSED:
+                log.warning(
+                    "Đang TẠM DỪNG: báo cáo chỉ gồm dữ liệu đã đo; ICMP không chạy "
+                    "trong lúc tạm dừng nên đừng đọc là gateway mất kết nối."
+                )
+            written = self.pipeline.write_reports(self.session, extra=extra)
             out = {name: str(path) for name, path in written.items()}
             log.info("Đã ghi báo cáo giữa phiên: %s", ", ".join(out))
             return out

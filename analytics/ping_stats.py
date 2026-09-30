@@ -178,6 +178,17 @@ class PingTracker:
     def stats(self) -> Dict[str, PingStats]:
         return self._stats
 
+    def reset_failure_streaks(self) -> None:
+        """Xoá chuỗi fail LIÊN TIẾP của mọi gateway (giữ `max_consecutive_failures`).
+
+        Gọi khi PHIÊN ĐƯỢC TIẾP TỤC sau tạm dừng. Chuỗi fail của lần ping trước
+        không còn "liên tiếp" nữa vì đã có một khoảng tool KHÔNG ping. Nếu không
+        xoá, hai lần fail trước khi tạm dừng cộng với lần fail đầu sau khi tiếp
+        tục sẽ đủ ngưỡng và sinh một cửa sổ DOWNTIME giả trong báo cáo.
+        """
+        for stats in self._stats.values():
+            stats.consecutive_failures = 0
+
     def stats_sorted(self) -> List[PingStats]:
         return sorted(self._stats.values(), key=lambda s: s.gateway_uid)
 
