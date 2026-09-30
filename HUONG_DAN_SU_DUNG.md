@@ -11,51 +11,97 @@ Tool **không sửa** firmware và **không sửa** tool nào khác trong repo.
 
 ---
 
-## 0. Cách nhanh nhất: dùng file `.exe` (không cần cài gì)
+## 0. Dùng ngay: chạy file `.exe` (không cần cài gì)
 
-Nếu bạn nhận được thư mục `release/…` (kèm `TestGatewayIoT.exe`), **không cần cài
-Python**, không cần `pip install`. Chỉ cần:
+> Đây là cách dùng **chuẩn**. Tool đã được đóng gói sẵn — **không cần** cài Python,
+> PyQt5, `pip`, hay bất kỳ môi trường nào khác.
 
-1. Copy cả thư mục ra **một chỗ cố định** trên PC (ví dụ `D:\TestGatewayIoT\`).
-   Đừng chạy trực tiếp trong file `.zip` — tool cần ghi `config/`, `data/`, `logs/`
-   **ngay cạnh file exe**.
-2. Nháy đúp `TestGatewayIoT.exe` → **GUI mở ra**.
-3. Lần chạy đầu, tool tự tạo `config/config.json` + `config/devices.json` cạnh exe
-   (copy từ bản mẫu đi kèm). Từ đó sửa trực tiếp bằng GUI hoặc bằng Notepad.
+**Cần những gì:**
 
-Chạy chế độ không GUI (test nhiều ngày):
+| Cần | Ghi chú |
+|---|---|
+| PC **Windows 64-bit** | Windows 10/11 đều được |
+| Một chỗ để lưu dữ liệu test | Nên là ổ đĩa còn **vài GB trống** (test 3–4 ngày sinh nhiều CSV) |
+| Mạng **LAN/Ethernet** thấy được broker + gateway | Gateway dạng `192.168.10.x`. **Không cần 4G** |
 
-```powershell
-.\TestGatewayIoT.exe --headless --hours 72
+### Bước 1 — Giải nén ra một chỗ cố định
+
+Nếu nhận được file `.zip`, **giải nén trước**. Đặt thư mục ở nơi cố định, ví dụ
+`D:\TestGatewayIoT\`.
+
+```
+D:\TestGatewayIoT\
+├── TestGatewayIoT.exe              ← nháy đúp file này
+├── config\                         ← cấu hình (tool tự sinh ở lần chạy đầu)
+├── docs\Danh sach 55 gateway.csv   ← danh mục gateway nhà máy
+├── HUONG_DAN_SU_DUNG.md            ← tài liệu này
+├── README.md                       ← tài liệu kỹ thuật
+└── release.json                    ← manifest: phiên bản + SHA-256 từng file
 ```
 
-Kiểm tra phiên bản / xem trợ giúp:
+> ⚠️ **Đừng** chạy exe trực tiếp bên trong file `.zip`. Tool cần ghi `config\`,
+> `data\`, `logs\` **ngay cạnh file exe** — chạy trong `.zip` là mất dữ liệu.
+
+### Bước 2 — Nháy đúp `TestGatewayIoT.exe`
+
+- **GUI mở ra**, kèm một **cửa sổ console đen**. Cửa sổ đó là **cố ý** (dùng để xem
+  log và chạy chế độ không GUI) — đừng đóng nó.
+- **Lần chạy đầu**, tool tự tạo `config\config.json` + `config\devices.json` cạnh exe
+  bằng cách copy bản mẫu đi kèm. Các lần sau nó **không ghi đè** nữa.
+- **SmartScreen** có thể hiện *"Windows protected your PC"* ở lần đầu: bản build nội
+  bộ **chưa ký số** → bấm **More info → Run anyway**. Antivirus cũng có thể nhận nhầm
+  bản onefile của PyInstaller → thêm **ngoại lệ** cho thư mục tool.
+
+### Bước 3 — Khai báo broker & gateway rồi chạy
+
+Xem **mục 3** (tab **⚙ Cấu hình** và **🛰 Thiết bị**). Xong thì bấm **▶ Bắt đầu test**.
+
+### Chạy bằng dòng lệnh
 
 ```powershell
-.\TestGatewayIoT.exe --version
-.\TestGatewayIoT.exe --help
+.\TestGatewayIoT.exe                              # mở GUI
+.\TestGatewayIoT.exe --headless --hours 72        # không GUI, tự dừng sau 72 giờ
+.\TestGatewayIoT.exe --version                    # -> test_gateway_iot 1.0.0
+.\TestGatewayIoT.exe --help                       # xem mọi tuỳ chọn
 ```
 
-> **Không dùng 4G.** Tool chỉ cần **TCP/IP thường**: MQTT tới broker + ICMP ping tới
-> gateway. Bản exe **không chứa** thư viện modem/cellular nào, nên **không thể** và
-> **không cần** dùng 4G. PC chỉ cần thấy được broker và các gateway qua **LAN/Ethernet**
-> (địa chỉ gateway dạng `192.168.10.x`). Bật/tắt Wi-Fi hay rút cáp 4G **không ảnh
-> hưởng** tới tool miễn là còn đường tới broker.
+Bảng tuỳ chọn đầy đủ ở **mục 2.3**.
 
-Nếu bạn **không** có file exe (chỉ có mã nguồn), bỏ qua mục này và đọc mục 1.
+> ⚠️ **`--hours` chỉ có tác dụng khi đi kèm `--headless`.** Chạy GUI mà truyền `--hours`
+> thì tool chỉ ghi cảnh báo vào log rồi bỏ qua.
 
-> 🔨 **Tự build lại exe?** Xem mục [11. Đóng gói bản phát hành](#11-đóng-gói-bản-phát-hành-exe--json).
+### Cập nhật bản mới / gỡ tool
+
+Chỉ cần **thay file `TestGatewayIoT.exe`**. Giữ nguyên thư mục `config\` và `data\` là
+**giữ nguyên cấu hình và toàn bộ phiên test cũ**. Mỗi phiên nằm riêng trong
+`data\runs\<mã phiên>\` nên **không bao giờ ghi đè nhau**. Muốn gỡ sạch thì xoá cả
+thư mục tool.
+
+### ⚠️ Không dùng 4G
+
+Tool chỉ cần **TCP/IP thường**: MQTT tới broker + ICMP ping tới gateway. Bản exe
+**không chứa** thư viện modem/cellular nào, nên **không thể** và **không cần** dùng 4G.
+PC chỉ cần thấy được broker và các gateway qua **LAN/Ethernet**. Bật/tắt Wi-Fi hay rút
+cáp 4G **không ảnh hưởng** tới tool miễn là còn đường tới broker.
+
+### Không có file `.exe`?
+
+Nếu bạn chỉ có **mã nguồn**: đọc **mục 1** (cài môi trường) và **mục 2** (cách chạy).
+Muốn tự build lại exe để gửi cho người khác → **mục 11**.
 
 ---
 
-## 1. Cài đặt (làm 1 lần)
+## 1. Cài môi trường (chỉ khi chạy từ **mã nguồn**)
+
+> Chỉ cần mục này nếu bạn **không** dùng file `.exe`. Người dùng exe bỏ qua mục 1 và 2,
+> đọc **mục 0** là đủ.
 
 ### 1.1. Yêu cầu
 
 | Thành phần | Ghi chú |
 |---|---|
 | **Python 3.10+** (repo đang dùng 3.14) | Cần có `python` trong PATH |
-| **Windows / Linux / macOS** | Tool chạy tốt trên cả ba |
+| **Windows / Linux / macOS** | Chạy mã nguồn thì tool chạy tốt trên cả ba. Bản `.exe` chỉ có cho **Windows 64-bit** |
 | **Kết nối tới broker MQTT** | Broker thật, thường là LAN hoặc Internet |
 | **PyQt5** | Chỉ cần nếu mở **GUI**. Chạy `--headless` thì không cần |
 
@@ -85,7 +131,9 @@ $env:PYTHONUTF8 = "1"
 
 ---
 
-## 2. Cách chạy
+## 2. Cách chạy (từ **mã nguồn**)
+
+> Dùng file `.exe` thì **không cần** phần này — xem **mục 0**.
 
 ### 2.1. Chạy GUI (dễ dùng, xem trực tiếp)
 
@@ -121,13 +169,25 @@ hoặc:
 
 ### 2.3. Các tuỳ chọn dòng lệnh
 
-| Tuỳ chọn | Ý nghĩa |
-|---|---|
-| `--headless` | Không mở GUI (vẫn nhận MQTT, ghi CSV, ping, chốt báo cáo) |
-| `--hours N` | Tự dừng sau N giờ (**chỉ dùng kèm `--headless`**) |
-| `--config-dir PATH` | Dùng thư mục cấu hình khác (mặc định `config/`) |
-| `--log-level` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
-| `--version` | In phiên bản tool |
+| Tuỳ chọn | `.exe` | Mã nguồn | Ý nghĩa |
+|---|---|---|---|
+| `--headless` | ✅ | ✅ | Không mở GUI (vẫn nhận MQTT, ghi CSV, ping, chốt báo cáo) |
+| `--hours N` | ✅ | ✅ | Tự dừng sau N giờ (**chỉ dùng kèm `--headless`**) |
+| `--config-dir PATH` | ✅ | ✅ | Dùng thư mục cấu hình khác (mặc định `config/` cạnh exe) |
+| `--log-level` | ✅ | ✅ | `DEBUG` / `INFO` / `WARNING` / `ERROR` (mặc định `INFO`) |
+| `--version` | ✅ | ✅ | In phiên bản tool |
+| `--help` | ✅ | ✅ | Xem trợ giúp |
+
+Đúng một dòng lệnh cho mỗi cách chạy:
+
+```powershell
+# Bản .exe
+.\TestGatewayIoT.exe --headless --hours 72 --log-level DEBUG
+
+# Từ mã nguồn
+$env:PYTHONUTF8 = "1"
+python main.py --headless --hours 72 --log-level DEBUG
+```
 
 ### 2.4. Tham số của `run.ps1`
 
@@ -463,6 +523,10 @@ Mỗi phiên lưu **ảnh chụp ngưỡng** vào `meta.json` (`scoring_params`)
 
 ## 7. Kiểm tra trước khi mang đi test thật
 
+> Phần này dành cho người **chạy từ mã nguồn** (cần Python). Người dùng bản `.exe`
+> không cần chạy test — chỉ cần mở tool lên, kiểm tra broker thấy **xanh** ở tab
+> **⚙ Cấu hình**, và thấy ping > 0 % ở tab **🛰 Thiết bị**.
+
 Không cần mạng, không cần broker, tự dọn thư mục tạm:
 
 ```powershell
@@ -483,10 +547,27 @@ máy không có PyQt5.
 
 ## 8. Lỗi thường gặp & cách xử lý
 
+### 8.1. Chỉ gặp khi dùng bản `.exe`
+
 | Hiện tượng | Nguyên nhân / Cách xử lý |
 |---|---|
-| `UnicodeEncodeError` khi chạy script | Console Windows là `cp1252` → chạy `$env:PYTHONUTF8 = "1"` trước |
-| `ModuleNotFoundError: paho` / `requests` / `PyQt5` | Chưa `pip install -r requirements.txt`. Nếu chỉ chạy `--headless` thì **không cần** PyQt5 |
+| Windows hiện *“Windows protected your PC”* | Bản build nội bộ **chưa ký số**. Bấm **More info → Run anyway** |
+| Antivirus xoá / chặn `TestGatewayIoT.exe` | Bản onefile của PyInstaller hay bị nhận nhầm. Thêm **ngoại lệ** cho thư mục tool trong antivirus |
+| Nháy đúp mà **không có gì xảy ra** | Kiểm tra còn **cửa sổ console đen** đang mở không (lỗi được in ở đó). Thử chạy bằng PowerShell để đọc lỗi trực tiếp |
+| Mở tool từ **trong file `.zip`** | Tool không ghi được `config/`/`data/`/`logs/`. **Giải nén ra thư mục thật** trước khi chạy |
+| Không tạo được `config/` cạnh exe | Thư mục đặt ở nơi **chỉ đọc** (vd `C:\Program Files\) hoặc ổ mạng. Chuyển sang `D:\TestGatewayIoT\` |
+| Mất cấu hình / mất phiên cũ sau khi cập nhật | Đã **chuyển sang chỗ khác** thay vì chỉ thay file exe. `config/` + `data/` phải nằm **cùng** thư mục với exe |
+| Cửa sổ **console đen** hiện cùng GUI | **Cố ý** — đó là nơi in log và là chế độ `--headless`. Đừng đóng |
+| Chữ trong cửa sổ console bị **méo dấu** | Chỉ là cách PowerShell 5.1 hiển thị UTF-8. **File log trên đĩa vẫn đúng.** Chỉ cần nhìn GUI |
+| `--hours 72` không tự dừng | `--hours` **chỉ** tác dụng khi đi kèm `--headless` |
+| Không thấy bảng **Kết quả** ở tab Lịch sử phiên | Phiên chạy bằng bản tool cũ chưa có `gateway_result.csv` → bấm **⚖ Chấm lại kết quả** |
+
+### 8.2. Gặp ở cả hai cách chạy
+
+| Hiện tượng | Nguyên nhân / Cách xử lý |
+|---|---|
+| `UnicodeEncodeError` khi chạy script | Console Windows là `cp1252` → chạy `$env:PYTHONUTF8 = "1"` trước. (Bản `.exe` tự bật UTF-8, không cần) |
+| `ModuleNotFoundError: paho` / `requests` / `PyQt5` | Chỉ xảy ra khi chạy **mã nguồn**: chưa `pip install -r requirements.txt` (chạy `--headless` thì không cần PyQt5) |
 | Thẻ **Kết nối MQTT** đỏ liên tục | Sai Host/Port/username/password, hoặc broker chặn. Bấm **🔌 Kiểm tra kết nối broker** ở tab Cấu hình |
 | Không thấy bản tin nào | Sai **topic chính** (mặc định `node/#`), hoặc chưa Bắt đầu test |
 | **Bản tin từ gateway lạ** tăng | UID không có trong `config/devices.json` → thêm vào tab Thiết bị. Dữ liệu vẫn được ghi đầy đủ |
@@ -579,18 +660,32 @@ git push
 ### 11.4. Vài điều cần biết về bản đóng gói
 
 - **`TestGatewayIoT.spec` là mã nguồn build** → phải commit. Thư mục `build/` và
-  `dist/` là kết quả trung gian → đã bị `.gitignore` bỏ qua.
+  `dist/` là kết quả trung gian → đã bị `.gitignore` bỏ qua. Thư mục `release/` thì
+  **được commit** (đó là gói để up lên git).
 - **Console vẫn hiện** khi mở GUI. Đây là **cố ý**: nhờ vậy chế độ
-  `--headless --hours 72` vẫn in được tiến độ, và lỗi khởi động vẫn đọc được. Bản exe
-  tự bật UTF-8 nên tiếng Việt hiển thị đúng, **không** cần `$env:PYTHONUTF8`.
+  `--headless --hours 72` vẫn in được tiến độ, và lỗi khởi động vẫn đọc được.
+- **Bản exe tự bật UTF-8** (`force_utf8_console()` trong `main.py`), nên **không** cần
+  `$env:PYTHONUTF8`. *Không* có nó thì bản đóng gói rơi về `cp1252` và **mọi dòng log
+  tiếng Việt đều ném `UnicodeEncodeError`**.
+- **Chữ trên cửa sổ console vẫn trông méo dấu** (PowerShell 5.1 render UTF-8 bằng
+  code page `cp850`). Đây là **hiện tượng hiển thị, không phải lỗi dữ liệu** — file
+  `logs/test_gateway_iot.log` trên đĩa luôn đúng UTF-8.
+- **Bản build KHÔNG ký số** → Windows SmartScreen sẽ cảnh báo ở lần chạy đầu. Xem 8.1.
+- **`requests` PHẢI có trong `hiddenimports`** của spec: `core/config.py::check_dependencies()`
+  gọi `__import__("requests")` bằng **chuỗi**, nên PyInstaller không tự phát hiện. Thiếu
+  nó là exe chết ngay với `Thiếu thư viện: requests`.
 - **`pyserial` không được đóng gói** — tool không import thư viện này ở đâu (nó chỉ
   có trong `requirements.txt` để tương thích với các tool khác cùng repo).
 - **Không có mã 4G/cellular nào trong bản build.** Tool chỉ dùng TCP/IP thường
   (MQTT + ICMP ping); xem mục 0.
-- **Đường dẫn khi chạy exe** do `core/paths.py` quyết định: `config/`, `data/`,
-  `logs/` luôn nằm **cạnh file exe**, không nằm trong thư mục tạm của PyInstaller —
-  nhờ đó dữ liệu test **không mất** khi đóng tool.
+- **Đường dẫn khi chạy exe** do `core/paths.py` quyết định:
+  - `APP_ROOT` (ghi) = **thư mục chứa exe** → `config/`, `data/`, `logs/` nằm ở đây,
+    nên **không mất** khi đóng tool (thư mục tạm `_MEIPASS` bị PyInstaller xoá khi thoát).
+  - `RESOURCE_ROOT` (đọc) = `sys._MEIPASS` → nơi đọc file mẫu đi kèm.
+  - `resource_path()` ưu tiên file nằm **cạnh exe**, nên có thể ghi đè
+    `docs/Danh sach 55 gateway.csv` bằng bản riêng mà không cần build lại.
 - **Muốn lấy exe ra dùng riêng?** Chỉ cần **một** file `TestGatewayIoT.exe`. Lần chạy
   đầu nó tự sinh `config/` cạnh đó (copy bản mẫu nhúng bên trong).
-</content>
-</invoke>
+- **`release.json`** chứa **SHA-256 + kích thước từng file** — người nhận có thể verify
+  bằng `Get-FileHash .\TestGatewayIoT.exe -Algorithm SHA256` rồi so với manifest.
+

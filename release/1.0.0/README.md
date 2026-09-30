@@ -9,7 +9,7 @@ Nguồn chân lý về protocol là `docs/MQTT_PROTOCOL_ANALYSIS.md` (đọc tr�
 firmware `../IoT_Type0_Gateway/src`).
 
 > **Không có Python?** Dùng bản đóng gói trong `release/<phiên bản>/` —
-> `TestGatewayIoT.exe` chạy độc lập, không cần cài gì. Xem §9.
+> `TestGatewayIoT.exe` chạy độc lập, **không cần cài môi trường nào**. Xem §9.
 
 ```
 Test_Gateway_IoT/
@@ -35,7 +35,31 @@ Test_Gateway_IoT/
 
 ## 1. Chạy
 
-Từ **mã nguồn** (cần Python + `pip install -r requirements.txt`):
+### 1.1. Từ **bản đóng gói** (khuyên dùng — không cần cài gì)
+
+Giải nén thư mục `release/<phiên bản>/` ra một chỗ cố định rồi:
+
+```powershell
+.\TestGatewayIoT.exe                     # GUI
+.\TestGatewayIoT.exe --headless --hours 72
+.\TestGatewayIoT.exe --version
+```
+
+Không cần Python, không cần `pip install`, không cần `PYTHONUTF8` (exe tự bật UTF-8).
+
+Khi chạy exe, `config/`, `data/`, `logs/` được tạo **ngay cạnh file exe** (không nằm
+trong thư mục tạm) — nhờ `core/paths.py`. Lần chạy đầu, exe tự sinh `config.json` +
+`devices.json` từ bản mẫu nhúng bên trong, **không ghi đè** file đã có.
+
+> ⚠️ Đừng chạy exe **trực tiếp trong file `.zip`** — tool cần ghi `config/`, `data/`,
+> `logs/` cạnh exe. Windows SmartScreen có thể cảnh báo lần đầu (bản build chưa ký số):
+> **More info → Run anyway**.
+
+> **Không dùng 4G.** Tool chỉ dùng **TCP/IP thường**: MQTT tới broker + ICMP ping tới
+> gateway. Bản build **không chứa** thư viện modem/cellular, nên **không thể** dùng 4G.
+> PC chỉ cần thấy broker + gateway qua **LAN/Ethernet** (gateway dạng `192.168.10.x`).
+
+### 1.2. Từ **mã nguồn** (cần Python + `pip install -r requirements.txt`)
 
 ```powershell
 # GUI
@@ -48,6 +72,11 @@ python main.py --headless --hours 72
 .\run.ps1 -Headless -Hours 72
 ```
 
+> Trên Windows, đặt `$env:PYTHONUTF8 = "1"` trước khi chạy mã nguồn, nếu không log
+> tiếng Việt sẽ ném `UnicodeEncodeError` (bản `.exe` tự xử lý việc này).
+
+### 1.3. Các tuỳ chọn dòng lệnh
+
 | Tuỳ chọn | Ý nghĩa |
 |---|---|
 | `--headless` | Không mở GUI; vẫn nhận MQTT, ghi CSV, ping, chốt báo cáo |
@@ -58,23 +87,6 @@ python main.py --headless --hours 72
 
 Trong chế độ headless, **Ctrl+C dừng sạch**: xử lý nốt hàng đợi → ghi báo cáo →
 cập nhật `meta.json`.
-
-Từ **bản đóng gói** (`release/<phiên bản>/TestGatewayIoT.exe`) — không cần Python,
-không cần `PYTHONUTF8` (exe tự bật UTF-8):
-
-```powershell
-.\TestGatewayIoT.exe                     # GUI
-.\TestGatewayIoT.exe --headless --hours 72
-.\TestGatewayIoT.exe --version
-```
-
-Khi chạy exe, `config/`, `data/`, `logs/` được tạo **ngay cạnh file exe** (không nằm
-trong thư mục tạm) — nhờ `core/paths.py`. Lần chạy đầu, exe tự sinh `config.json` +
-`devices.json` từ bản mẫu nhúng bên trong, **không ghi đè** file đã có.
-
-> **Không dùng 4G.** Tool chỉ dùng **TCP/IP thường**: MQTT tới broker + ICMP ping tới
-> gateway. Bản build **không chứa** thư viện modem/cellular, nên **không thể** dùng 4G.
-> PC chỉ cần thấy broker + gateway qua **LAN/Ethernet** (gateway dạng `192.168.10.x`).
 
 ## 2. Dữ liệu được tạo ra
 
