@@ -33,12 +33,15 @@ import csv
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from .paths import resource_path
 from .uid import gateway_name_index, gateway_uid_variants, normalize_hex_uid
 
 #: Vị trí mặc định: `docs/Danh sach 55 gateway.csv` (nguồn do nhà máy cung cấp).
-DEFAULT_CATALOG_PATH = (
-    Path(__file__).resolve().parent.parent / "docs" / "Danh sach 55 gateway.csv"
-)
+#:
+#: Dùng `resource_path()` thay vì `__file__` để bản `.exe` vẫn đọc được danh mục
+#: đi kèm (PyInstaller giải nén vào `sys._MEIPASS`); nếu người dùng đặt file
+#: cùng tên cạnh exe thì bản đó được ưu tiên.
+DEFAULT_CATALOG_PATH = resource_path("docs/Danh sach 55 gateway.csv")
 
 #: Tên cột UID theo thứ tự ưu tiên.
 _UID_KEYS = ("uuid", "uid", "gateway_uid", "gateway_id", "mac", "device_uuid")

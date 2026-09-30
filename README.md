@@ -8,26 +8,34 @@ Tool độc lập, **không sửa** source firmware và không sửa các tool k
 Nguồn chân lý về protocol là `docs/MQTT_PROTOCOL_ANALYSIS.md` (đọc trực tiếp từ
 firmware `../IoT_Type0_Gateway/src`).
 
+> **Không có Python?** Dùng bản đóng gói trong `release/<phiên bản>/` —
+> `TestGatewayIoT.exe` chạy độc lập, không cần cài gì. Xem §9.
+
 ```
 Test_Gateway_IoT/
 ├── main.py                  # entry point: GUI (mặc định) hoặc --headless
 ├── run.ps1                  # chạy nhanh trên Windows
 ├── requirements.txt
 ├── HUONG_DAN_SU_DUNG.md     # hướng dẫn sử dụng cho người mới
+├── TestGatewayIoT.spec      # cấu hình PyInstaller (nguồn build .exe)
 ├── config/
 │   ├── config.json          # broker, topic, ngưỡng SEQ/ping/cảnh báo, storage
 │   └── devices.json         # danh sách gateway cần theo dõi
-├── core/                    # config, models, parser, UID, pipeline
+├── core/                    # config, models, parser, UID, pipeline, paths
 ├── storage/                 # schema CSV, CsvSink, reader (search), RunSession
 ├── analytics/               # SEQ tracker, ping stats, correlation, anomaly
 ├── runtime/                 # MQTT subscriber, ping monitor, MonitorRunner
 ├── ui/                      # PyQt5: 5 tab (Giám sát / Thiết bị / Tìm kiếm / Lịch sử phiên / Cấu hình)
 ├── docs/                    # phân tích protocol firmware
+├── tools/                   # script đóng gói bản phát hành
+├── release/<version>/       # bản phát hành đã gom: exe + json + manifest (commit lên git)
 ├── logs/                    # log của chính tool (xoay vòng 5×5 MB)
 └── data/<run_id>/           # dữ liệu từng phiên test
 ```
 
 ## 1. Chạy
+
+Từ **mã nguồn** (cần Python + `pip install -r requirements.txt`):
 
 ```powershell
 # GUI
@@ -50,6 +58,23 @@ python main.py --headless --hours 72
 
 Trong chế độ headless, **Ctrl+C dừng sạch**: xử lý nốt hàng đợi → ghi báo cáo →
 cập nhật `meta.json`.
+
+Từ **bản đóng gói** (`release/<phiên bản>/TestGatewayIoT.exe`) — không cần Python,
+không cần `PYTHONUTF8` (exe tự bật UTF-8):
+
+```powershell
+.\TestGatewayIoT.exe                     # GUI
+.\TestGatewayIoT.exe --headless --hours 72
+.\TestGatewayIoT.exe --version
+```
+
+Khi chạy exe, `config/`, `data/`, `logs/` được tạo **ngay cạnh file exe** (không nằm
+trong thư mục tạm) — nhờ `core/paths.py`. Lần chạy đầu, exe tự sinh `config.json` +
+`devices.json` từ bản mẫu nhúng bên trong, **không ghi đè** file đã có.
+
+> **Không dùng 4G.** Tool chỉ dùng **TCP/IP thường**: MQTT tới broker + ICMP ping tới
+> gateway. Bản build **không chứa** thư viện modem/cellular, nên **không thể** dùng 4G.
+> PC chỉ cần thấy broker + gateway qua **LAN/Ethernet** (gateway dạng `192.168.10.x`).
 
 ## 2. Dữ liệu được tạo ra
 
@@ -745,4 +770,90 @@ là **tên phiên** người dùng đặt (khác hoàn toàn với tên gateway)
 Mỗi dict gồm cả số liệu đã diễn giải sẵn cho GUI
 (`duration_label`, `gateways_label`, `size_label`, `status_label`, …) nên GUI
 không phải đọc lại `meta.json` / CSV.
+
+## 9. Đóng gói bản phát hành (`.exe` + JSON)
+
+Gửi tool cho người khác dùng mà **không cần cài Python**.
+
+### 9.1. Build
+
+```powershell
+pip install pyinstaller
+.\tools\build_release.ps1
+```
+
+Script tự đọc phiên bản từ `core/__init__.py` → build exe → gom gói → sinh manifest
+JSON → nén ZIP. Tuỳ chọn: `-SkipBuild`, `-Version 1.0.1`, `-NoZip`, `-Python <path>`.
+
+Chỉ build exe:
+
+```powershell
+python -m PyInstaller --clean --noconfirm TestGatewayIoT.spec
+```
+
+### 9.2. Sản phẩm
+
+| Đường dẫn | Nội dung | Commit? |
+|---|---|---|
+| `release/<version>/TestGatewayIoT.exe` | Bản chạy độc lập (~44 MB), Windows x64 | ✅ |
+| `release/<version>/config/*.json` | Cấu hình + danh sách gateway mẫu | ✅ |
+| `release/<version>/docs/…csv` | Danh mục gateway nhà máy | ✅ |
+| `release/<version>/release.json` | Manifest: version, thời điểm build, **SHA-256** mọi file, ghi chú mạng | ✅ |
+| `release/*.zip` | Gói nén để gửi kèm | ❌ (`.gitignore`) |
+| `TestGatewayIoT.spec` | **Mã nguồn build** — phải commit | ✅ |
+| `build/`, `dist/` | Kết quả trung gian của PyInstaller | ❌ (`.gitignore`) |
+
+### 9.3. Vì sao bản đóng gói cần `core/paths.py`
+
+Trong chế độ onefile, PyInstaller giải nén code vào thư mục tạm `sys._MEIPASS` và
+**xoá nó khi thoát**. Nếu `config/`, `data/`, `logs/` vẫn tính theo `__file__` thì
+người dùng chạy được nhưng **mất sạch cấu hình và dữ liệu test** sau khi đóng tool.
+
+`core/paths.py` tách đôi:
+
+| Gốc | Chạy mã nguồn | Chạy `.exe` | Dùng cho |
+|---|---|---|---|
+| `APP_ROOT` (ghi) | thư mục dự án | thư mục chứa exe | `config/`, `data/`, `logs/` |
+| `RESOURCE_ROOT` (đọc) | thư mục dự án | `sys._MEIPASS` | danh mục gateway, config mẫu |
+
+`resource_path()` ưu tiên bản trong `APP_ROOT` nếu tồn tại → có thể thay
+`docs/Danh sach 55 gateway.csv` bằng file đặt cạnh exe. `seed_file()` (gọi từ
+`ensure_user_config()`) copy config mẫu ra cạnh exe **một lần, không ghi đè**.
+
+### 9.4. Vì sao là bản `console` (không `--windowed`)
+
+Tool có **hai** chế độ: GUI và `--headless --hours N`. Nếu tắt console thì chế độ
+headless mất hết log tiến độ, đồng thời không đọc được lỗi khi khởi động GUI hỏng.
+
+Bản exe **tự bật UTF-8** (`force_utf8_console()` trong `main.py`) nên **không cần**
+`$env:PYTHONUTF8`. Không có nó, bản đóng gói rơi về `cp1252` và **mọi dòng log
+tiếng Việt đều ném `UnicodeEncodeError`**. Lưu ý: file log trên đĩa luôn là UTF-8
+đúng; chỉ khi *nhìn trực tiếp trên console* của PowerShell 5.1 mới thấy chữ méo
+(cửa sổ console render UTF-8 bằng code page `cp850`) — **hiện tượng hiển thị, không
+phải lỗi dữ liệu**.
+
+### 9.5. Không dùng 4G
+
+Bản build **không chứa** thư viện modem/cellular/AT-command nào (kiểm tra bằng
+cách grep toàn repo: không có mã 4G/LTE nào). Tool chỉ dùng:
+
+- **MQTT over TCP** tới broker (`config.json` → `mqtt_host` / `mqtt_port`),
+- **ICMP ping** tới `eth_ip` của từng gateway (dạng `192.168.10.x`).
+
+⇒ PC chỉ cần **LAN/Ethernet** thấy được broker và gateway. Bật/tắt Wi-Fi, rút cắm
+cáp 4G **không ảnh hưởng**. `release.json` ghi lại `network.note` + `mqtt_host` để
+người nhận biết bản này cấu hình cho mạng nào.
+
+### 9.6. Up lên git
+
+```powershell
+git add release TestGatewayIoT.spec tools core/paths.py .gitignore README.md HUONG_DAN_SU_DUNG.md
+git commit -m "release: 1.0.0 (exe + json, chay LAN khong dung 4G)"
+git push
+```
+
+> Repo **private** nên commit exe trực tiếp được. Nếu sau này muốn giảm dung lượng
+> lịch sử git, chuyển sang đính exe vào **GitHub Release** và bỏ `release/` khỏi
+> `.gitignore`.
+
 

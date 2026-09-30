@@ -1,14 +1,50 @@
 # Hướng dẫn sử dụng — Test Gateway IoT
 
-> Tài liệu này để **người mới đọc qua là chạy được ngay**.
-> Muốn hiểu sâu về thuật toán/thiết kế, đọc tiếp [`README.md`](README.md).
+> Tài liệu thuật toán/thiết kế đọc ở [`README.md`](README.md).
 > Muốn hiểu protocol MQTT của firmware, đọc [`docs/MQTT_PROTOCOL_ANALYSIS.md`](docs/MQTT_PROTOCOL_ANALYSIS.md).
 
-**Tool này để làm gì?** Ngồi nghe MQTT từ nhiều gateway IoT (LoRa → 4G/Ethernet) trong
-**3–4 ngày liên tục**, ghi lại mọi bản tin, đối chiếu với **ping** để tách lỗi mạng
+**Tool này để làm gì?** Ngồi nghe MQTT từ nhiều gateway IoT (LoRa → Wifi/Ethernet) trong
+**nhiều ngày liên tục**, ghi lại mọi bản tin, đối chiếu với **ping** để tách lỗi mạng
 khỏi lỗi thiết bị, rồi chốt ra **báo cáo ĐẠT / KHÔNG ĐẠT cho từng gateway**.
 
 Tool **không sửa** firmware và **không sửa** tool nào khác trong repo.
+
+---
+
+## 0. Cách nhanh nhất: dùng file `.exe` (không cần cài gì)
+
+Nếu bạn nhận được thư mục `release/…` (kèm `TestGatewayIoT.exe`), **không cần cài
+Python**, không cần `pip install`. Chỉ cần:
+
+1. Copy cả thư mục ra **một chỗ cố định** trên PC (ví dụ `D:\TestGatewayIoT\`).
+   Đừng chạy trực tiếp trong file `.zip` — tool cần ghi `config/`, `data/`, `logs/`
+   **ngay cạnh file exe**.
+2. Nháy đúp `TestGatewayIoT.exe` → **GUI mở ra**.
+3. Lần chạy đầu, tool tự tạo `config/config.json` + `config/devices.json` cạnh exe
+   (copy từ bản mẫu đi kèm). Từ đó sửa trực tiếp bằng GUI hoặc bằng Notepad.
+
+Chạy chế độ không GUI (test nhiều ngày):
+
+```powershell
+.\TestGatewayIoT.exe --headless --hours 72
+```
+
+Kiểm tra phiên bản / xem trợ giúp:
+
+```powershell
+.\TestGatewayIoT.exe --version
+.\TestGatewayIoT.exe --help
+```
+
+> **Không dùng 4G.** Tool chỉ cần **TCP/IP thường**: MQTT tới broker + ICMP ping tới
+> gateway. Bản exe **không chứa** thư viện modem/cellular nào, nên **không thể** và
+> **không cần** dùng 4G. PC chỉ cần thấy được broker và các gateway qua **LAN/Ethernet**
+> (địa chỉ gateway dạng `192.168.10.x`). Bật/tắt Wi-Fi hay rút cáp 4G **không ảnh
+> hưởng** tới tool miễn là còn đường tới broker.
+
+Nếu bạn **không** có file exe (chỉ có mã nguồn), bỏ qua mục này và đọc mục 1.
+
+> 🔨 **Tự build lại exe?** Xem mục [11. Đóng gói bản phát hành](#11-đóng-gói-bản-phát-hành-exe--json).
 
 ---
 
@@ -22,6 +58,8 @@ Tool **không sửa** firmware và **không sửa** tool nào khác trong repo.
 | **Windows / Linux / macOS** | Tool chạy tốt trên cả ba |
 | **Kết nối tới broker MQTT** | Broker thật, thường là LAN hoặc Internet |
 | **PyQt5** | Chỉ cần nếu mở **GUI**. Chạy `--headless` thì không cần |
+
+> Dùng file `.exe` thì **không cần** Python, PyQt5 hay pip — xem mục 0.
 
 ### 1.2. Cài thư viện
 
@@ -43,6 +81,7 @@ $env:PYTHONUTF8 = "1"
 ```
 
 > Nếu dùng `run.ps1` thì không cần quan tâm — script đã in ASCII thuần để tránh lỗi này.
+> Bản `.exe` cũng **tự bật UTF-8** khi khởi động, nên chạy exe không cần đặt gì.
 
 ---
 
@@ -483,5 +522,75 @@ máy không có PyQt5.
 - [`docs/MQTT_PROTOCOL_ANALYSIS.md`](docs/MQTT_PROTOCOL_ANALYSIS.md) — phân tích protocol
   MQTT đọc trực tiếp từ firmware.
 - `docs/Danh sach 55 gateway.csv` — danh sách gateway tham chiếu.
+
+---
+
+## 11. Đóng gói bản phát hành (`.exe` + JSON)
+
+Dành cho người **phát triển** muốn tạo file `.exe` để gửi cho đồng nghiệp hoặc up lên git.
+
+### 11.1. Một lệnh duy nhất
+
+```powershell
+.\tools\build_release.ps1
+```
+
+Script sẽ tự: đọc phiên bản từ `core/__init__.py` → build exe bằng PyInstaller →
+gom gói phát hành → sinh manifest JSON → nén ZIP.
+
+Kết quả trong `release/<phiên bản>/`:
+
+| File | Nội dung |
+|---|---|
+| `TestGatewayIoT.exe` | Bản chạy độc lập, **không cần Python**. Khoảng 44 MB |
+| `config/config.json` | Cấu hình mẫu (broker, ngưỡng…) — người dùng sửa trực tiếp |
+| `config/devices.json` | Danh sách gateway mẫu |
+| `docs/Danh sach 55 gateway.csv` | Danh mục gateway nhà máy |
+| `HUONG_DAN_SU_DUNG.md`, `README.md` | Tài liệu đi kèm |
+| `release.json` | **Manifest**: phiên bản, thời điểm build, kích thước + **SHA-256** từng file |
+
+Ngoài ra có `release/TestGatewayIoT-<phiên bản>-win-x64.zip` để gửi kèm
+(file `.zip` bị `.gitignore` bỏ qua — chỉ commit thư mục `release/<phiên bản>/`).
+
+### 11.2. Các tuỳ chọn
+
+```powershell
+.\tools\build_release.ps1 -SkipBuild        # chỉ gom lại, không build lại exe
+.\tools\build_release.ps1 -Version 1.0.1    # đặt phiên bản thủ công
+.\tools\build_release.ps1 -NoZip            # không tạo file .zip
+.\tools\build_release.ps1 -Python C:\python314\python.exe
+```
+
+Chỉ muốn build exe (không gom gói):
+
+```powershell
+pip install pyinstaller
+python -m PyInstaller --clean --noconfirm TestGatewayIoT.spec
+```
+
+### 11.3. Up lên git
+
+```powershell
+git add release TestGatewayIoT.spec tools .gitignore core/paths.py
+git commit -m "release: 1.0.0 (exe + json cho LAN, khong dung 4G)"
+git push
+```
+
+### 11.4. Vài điều cần biết về bản đóng gói
+
+- **`TestGatewayIoT.spec` là mã nguồn build** → phải commit. Thư mục `build/` và
+  `dist/` là kết quả trung gian → đã bị `.gitignore` bỏ qua.
+- **Console vẫn hiện** khi mở GUI. Đây là **cố ý**: nhờ vậy chế độ
+  `--headless --hours 72` vẫn in được tiến độ, và lỗi khởi động vẫn đọc được. Bản exe
+  tự bật UTF-8 nên tiếng Việt hiển thị đúng, **không** cần `$env:PYTHONUTF8`.
+- **`pyserial` không được đóng gói** — tool không import thư viện này ở đâu (nó chỉ
+  có trong `requirements.txt` để tương thích với các tool khác cùng repo).
+- **Không có mã 4G/cellular nào trong bản build.** Tool chỉ dùng TCP/IP thường
+  (MQTT + ICMP ping); xem mục 0.
+- **Đường dẫn khi chạy exe** do `core/paths.py` quyết định: `config/`, `data/`,
+  `logs/` luôn nằm **cạnh file exe**, không nằm trong thư mục tạm của PyInstaller —
+  nhờ đó dữ liệu test **không mất** khi đóng tool.
+- **Muốn lấy exe ra dùng riêng?** Chỉ cần **một** file `TestGatewayIoT.exe`. Lần chạy
+  đầu nó tự sinh `config/` cạnh đó (copy bản mẫu nhúng bên trong).
 </content>
 </invoke>

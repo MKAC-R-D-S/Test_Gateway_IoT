@@ -1,0 +1,53 @@
+﻿{
+    "schema":  1,
+    "tool":  "Test Gateway IoT",
+    "cli":  "test_gateway_iot",
+    "version":  "1.0.0",
+    "built_at":  "2026-09-30T08:09:46Z",
+    "platform":  "windows-x64",
+    "entrypoint":  "TestGatewayIoT.exe",
+    "python_needed":  false,
+    "network":  {
+                    "note":  "Chi dung TCP/IP thuong (MQTT broker + ICMP ping). KHONG dung 4G/3G/cellular.",
+                    "mqtt_host":  "45.117.170.179",
+                    "mqtt_port":  1885,
+                    "requires":  "PC phai thay duoc broker va cac gateway qua LAN/Ethernet (vd 192.168.10.x)"
+                },
+    "usage":  {
+                  "gui":  "TestGatewayIoT.exe",
+                  "headless":  "TestGatewayIoT.exe --headless --hours 72",
+                  "version":  "TestGatewayIoT.exe --version"
+              },
+    "files":  [
+                  {
+                      "path":  "TestGatewayIoT.exe",
+                      "bytes":  45837434,
+                      "sha256":  "827f14cf660cd9c5eefa56a45b15160c9ad4ba788a30a7d76f55d2437281fcaa"
+                  },
+                  {
+                      "path":  "config/config.json",
+                      "bytes":  1957,
+                      "sha256":  "5cd065ab3fb610d5071b8a7857bb70b0f4b720123edc11e2d5febd3adb3be638"
+                  },
+                  {
+                      "path":  "config/devices.json",
+                      "bytes":  2629,
+                      "sha256":  "a5dd92e3efbc10d13125b9bebb04fedbc73b00b7c1997dea517d94d1f9728433"
+                  },
+                  {
+                      "path":  "docs/Danh sach 55 gateway.csv",
+                      "bytes":  2152,
+                      "sha256":  "b9c724e8de4d79131a29e1eeeb980f936beb7d17e09fd3d727bc10a109188731"
+                  },
+                  {
+                      "path":  "HUONG_DAN_SU_DUNG.md",
+                      "bytes":  29952,
+                      "sha256":  "8900139379644e9433ed178f794f7200d911736138112c669eaf7b123c1bc2ba"
+                  },
+                  {
+                      "path":  "README.md",
+                      "bytes":  59147,
+                      "sha256":  "ffa69098c84b51b7986e378bcf230395b71a1ab5cadf81d6c16a1d295883e261"
+                  }
+              ]
+}

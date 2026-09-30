@@ -33,7 +33,19 @@ if str(TOOL_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOL_ROOT))
 
 from core import __version__ as TOOL_VERSION  # noqa: E402
-from core.config import CONFIG_DIR, TOOL_ROOT as CORE_TOOL_ROOT, ConfigStore  # noqa: E402
+from core import paths as tool_paths  # noqa: E402
+from core.config import (  # noqa: E402
+    CONFIG_DIR,
+    TOOL_ROOT as CORE_TOOL_ROOT,
+    ConfigStore,
+    ensure_user_config,
+)
+
+#: Trong bản `.exe`, PyInstaller giải nén code vào `sys._MEIPASS`; thêm vào
+#: `sys.path` để chắc chắn import được các package đi kèm (core/ui/analytics/...).
+_MEIPASS = getattr(sys, "_MEIPASS", None)
+if _MEIPASS and _MEIPASS not in sys.path:
+    sys.path.insert(0, _MEIPASS)
 
 LOG_DIR = CORE_TOOL_ROOT / "logs"
 
@@ -41,8 +53,31 @@ LOG_DIR = CORE_TOOL_ROOT / "logs"
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+def force_utf8_console() -> None:
+    """Ép console ra UTF-8 để in được tiếng Việt.
+
+    Vì sao cần: console Windows mặc định dùng cp1252 → mọi dòng log có dấu
+    tiếng Việt làm `logging` ném `UnicodeEncodeError` (thấy rõ nhất ở bản
+    `.exe`, khi người dùng không chạy qua `run.ps1` để đặt `PYTHONUTF8=1`).
+
+    Phải gọi **trước** khi cài handler log, vì `logging.StreamHandler` giữ
+    tham chiếu tới `sys.stdout` lúc tạo.
+    """
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):  # pragma: no cover - phụ thuộc loại stream
+            pass
+
+
 def setup_logging(level: str = "INFO", to_file: bool = True, console: bool = True) -> None:
     """Log ra console + file xoay vòng (`logs/test_gateway_iot.log`)."""
+    force_utf8_console()
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
     for handler in list(root.handlers):
@@ -351,11 +386,16 @@ def main(argv=None) -> int:
         print("Cài đặt: pip install -r requirements.txt", file=sys.stderr)
         return 2
 
+    # Bản .exe: đưa config.json/devices.json mẫu ra cạnh file exe (lần chạy đầu).
+    # Chạy từ mã nguồn thì hàm này không làm gì.
+    ensure_user_config()
+
     store = ConfigStore(args.config_dir) if args.config_dir else ConfigStore()
     config = store.load_config()
     devices = store.load_devices()
 
     log.info("Test Gateway IoT v%s — cấu hình: %s", TOOL_VERSION, store.config_path)
+    log.info("Đường dẫn: %s", tool_paths.describe())
     log.info("Broker %s:%d | topic %s",
              config.mqtt_host, config.mqtt_port,
              ", ".join(config.effective_subscribe_topics()))

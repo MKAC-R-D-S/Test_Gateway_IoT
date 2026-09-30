@@ -1,0 +1,92 @@
+[
+    {
+        "uid": "E006199E139C",
+        "name": "MGWI-V1-26070012",
+        "eth_ip": "192.168.10.101",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "7b68469e48294ea6824ead1992014af7"
+    },
+    {
+        "uid": "2CF9199E139C",
+        "name": "MGWI-V1-26070007",
+        "eth_ip": "192.168.10.17",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "81671e5145ac45869ae22cfe4ed981cb"
+    },
+    {
+        "uid": "C006199E139C",
+        "name": "MGWI-V1-26070003",
+        "eth_ip": "192.168.10.115",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "5463016166694ab6b0d1abc7fc550ba1"
+    },
+    {
+        "uid": "04F9199E139C",
+        "name": "MGWI-V1-26070019",
+        "eth_ip": "192.168.10.39",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "27d774755e4d409d858515411ef96f0c"
+    },
+    {
+        "uid": "50F9199E139C",
+        "name": "MGWI-V1-26070022",
+        "eth_ip": "192.168.10.100",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "d576b71c4cb6425793de820791e89324"
+    },
+    {
+        "uid": "DCF8199E139C",
+        "name": "MGWI-V1-26070046",
+        "eth_ip": "192.168.10.40",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "3b5e8e8df0574e96945d78bb04f850c5"
+    },
+    {
+        "uid": "1C07199E139C",
+        "name": "MGWI-V1-26070047",
+        "eth_ip": "192.168.10.180",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "f601f51c0fff48f2a0c5ba9629f7e347"
+    },
+    {
+        "uid": "1CF9199E139C",
+        "name": "MGWI-V1-26070031",
+        "eth_ip": "192.168.10.110",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "830e2d6ec3a642f199ff8b00f62a2a6d"
+    },
+    {
+        "uid": "C406199E139C",
+        "name": "MGWI-V1-26070032",
+        "eth_ip": "192.168.10.108",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "3096487722314613acf3032f091f9e29"
+    },
+    {
+        "uid": "34F9199E139C",
+        "name": "MGWI-V1-26070036",
+        "eth_ip": "192.168.10.33",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Version 1.0.5",
+        "id": "aef3df3071c84ab6805bd5b0c5ab6752"
+    }
+]

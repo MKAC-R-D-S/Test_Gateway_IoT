@@ -30,3 +30,17 @@ htmlcov/
 *.swp
 Thumbs.db
 desktop.ini
+
+# ---------------------------------------------------------------------------
+# PyInstaller (dong goi .exe)
+#   TestGatewayIoT.spec  = ma nguon build      -> PHAI commit
+#   build/               = thu muc trung gian  -> BO QUA
+#   dist/                = ket qua tho cua PyInstaller -> BO QUA
+#   release/             = goi phat hanh da gom (exe + json + manifest)
+#                          -> COMMIT de up len git, xem tools/build_release.ps1
+#                          (file .zip chi de gui kem -> bo qua, tranh nhan doi dung luong)
+# ---------------------------------------------------------------------------
+build/
+dist/
+release/*.zip
+

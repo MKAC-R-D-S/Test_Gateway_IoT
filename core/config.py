@@ -18,11 +18,28 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-TOOL_ROOT = Path(__file__).resolve().parent.parent
+from .paths import APP_ROOT, seed_file
+
+#: Gốc của tool = thư mục chứa `config/`, `data/`, `logs/`.
+#:
+#: Khi chạy từ mã nguồn đây là thư mục dự án; khi chạy bản đóng gói `.exe`
+#: đây là thư mục chứa file exe (xem `core/paths.py` — **không** dùng `__file__`
+#: vì trong bản onefile nó trỏ vào thư mục tạm bị xoá khi thoát).
+TOOL_ROOT = APP_ROOT
 CONFIG_DIR = TOOL_ROOT / "config"
 DATA_DIR = TOOL_ROOT / "data"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 DEVICES_PATH = CONFIG_DIR / "devices.json"
+
+
+def ensure_user_config() -> None:
+    """Lần chạy đầu của bản `.exe`: đưa `config.json`/`devices.json` mẫu ra cạnh exe.
+
+    Chạy từ mã nguồn thì đây là no-op (nguồn và đích trùng nhau). Không bao giờ
+    ghi đè file người dùng đã sửa; lỗi copy không được làm sập tool.
+    """
+    seed_file("config/config.json")
+    seed_file("config/devices.json")
 
 DEFAULT_MQTT_HOST = "45.117.170.179"
 DEFAULT_MQTT_PORT = 1883
