@@ -624,11 +624,19 @@ class MonitorTab(QWidget):
         ping_total = ping.get("total_pings", 0) or 0
         ping_failed = ping.get("failed_pings", 0) or 0
         ping_ok = ping_total - ping_failed
+        down = self._ping_downtime_totals()
+        # Vẫn hiển thị downtime ngay trên thẻ này để người dùng biết tổng khoảng
+        # thời gian ngắt kết nối ping (kể cả cửa sổ còn đang mất kết nối).
+        ping_sub = "%s/%s thành công • %d gateway" % (
+            fmt_int(ping_ok), fmt_int(ping_total), ping.get("targets", 0) or 0,
+        )
+        ping_sub += " • downtime %s (%s lần)" % (
+            theme.human_duration(down["seconds"]),
+            theme.human_count(down["events"]),
+        )
         self.card_ping.set(
             "%s%%" % (round(100.0 * ping_ok / ping_total, 1) if ping_total else "—"),
-            "%s/%s thành công • %d gateway" % (
-                fmt_int(ping_ok), fmt_int(ping_total), ping.get("targets", 0) or 0,
-            ),
+            ping_sub,
             theme.COLOR_OK if ping_total and ping_failed == 0 else
             (theme.COLOR_WARN if ping_total else theme.COLOR_DIM),
         )
@@ -713,6 +721,33 @@ class MonitorTab(QWidget):
         # (reset làm mất vị trí scroll/selection của người dùng).
         self._node_tick = getattr(self, "_node_tick", 0) + 1
         return self._node_tick % 10 == 0
+
+    def _ping_downtime_totals(self) -> Dict[str, Any]:
+        """Tổng thời gian downtime + số lần mất kết nối ping của cả phiên.
+
+        Lấy đúng dữ liệu đang hiển thị ở bảng "Downtime": các cửa sổ đã đóng
+        (`downtime_records`) cộng với cửa sổ còn đang mất kết nối
+        (`open_windows`) — nên con số này gồm cả khoảng đang ngắt hiện tại.
+        """
+        empty = {"seconds": 0.0, "events": 0, "ongoing": False}
+        if self.runner is None or self.runner.pipeline is None:
+            return empty
+        tracker = self.runner.pipeline.ping_tracker
+        seconds = 0.0
+        events = 0
+        try:
+            for record in tracker.downtime_records():
+                seconds += float(record.duration_seconds or 0.0)
+                events += 1
+            open_windows = tracker.open_windows()
+            for window in open_windows.values():
+                seconds += float(window.get("ongoing_seconds") or 0.0)
+                if window.get("confirmed"):
+                    events += 1
+        except Exception:  # noqa: BLE001 - thẻ chỉ số không được làm GUI crash
+            return empty
+        return {"seconds": seconds, "events": events,
+                "ongoing": bool(open_windows)}
 
     def _update_downtime(self, stats: Dict[str, Any]) -> None:
         if self.runner is None or self.runner.pipeline is None:

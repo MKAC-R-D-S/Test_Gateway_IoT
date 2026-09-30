@@ -1,5 +1,9 @@
 # Test Gateway IoT — theo dõi MQTT nhiều gateway IoT Type0 trong 3–4 ngày
 
+> **Mới dùng tool lần đầu?** Đọc [`HUONG_DAN_SU_DUNG.md`](HUONG_DAN_SU_DUNG.md) —
+> hướng dẫn từ cài đặt, chạy GUI/headless, từng tab, tới đọc báo cáo (kèm cách đọc
+> **downtime**). File dưới đây là tài liệu **kỹ thuật chi tiết**.
+
 Tool độc lập, **không sửa** source firmware và không sửa các tool khác trong repo.
 Nguồn chân lý về protocol là `docs/MQTT_PROTOCOL_ANALYSIS.md` (đọc trực tiếp từ
 firmware `../IoT_Type0_Gateway/src`).
@@ -9,6 +13,7 @@ Test_Gateway_IoT/
 ├── main.py                  # entry point: GUI (mặc định) hoặc --headless
 ├── run.ps1                  # chạy nhanh trên Windows
 ├── requirements.txt
+├── HUONG_DAN_SU_DUNG.md     # hướng dẫn sử dụng cho người mới
 ├── config/
 │   ├── config.json          # broker, topic, ngưỡng SEQ/ping/cảnh báo, storage
 │   └── devices.json         # danh sách gateway cần theo dõi
@@ -345,6 +350,12 @@ gateway chỉ đơn giản là chưa có số liệu.
 > Các cột `downtime_events` / `downtime_seconds`, `verdict`, `windows_total` /
 > `silence_windows` / `silence_percent` **vẫn được xuất ra CSV** và hiển thị ở tab
 > Ping, MQTT ↔ Ping để **chẩn đoán**, nhưng **không** vào kết luận ĐẠT / KHÔNG ĐẠT.
+>
+> **Downtime vẫn hiển thị đầy đủ ở GUI** (yêu cầu người dùng): thẻ **Ping gateway**
+> ở tab **Giám sát** in luôn **tổng thời gian downtime + số lần mất kết nối**, bảng
+> **Downtime** liệt kê từng khoảng, và tab **Lịch sử phiên** có trang **Downtime**
+> (`reports/gateway_downtime.csv`) cùng cột *Số lần downtime / Downtime (s)* ở trang
+> **Ping** (`reports/ping_summary.csv`).
 
 Tiêu chí **2** dùng **mẫu số riêng của từng gateway** (`packets_expected`), không
 phải mẫu số chung của cả cụm: mẫu số chỉ cộng các **node mà chính gateway đó ĐÃ

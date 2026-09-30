@@ -1,0 +1,487 @@
+# Hướng dẫn sử dụng — Test Gateway IoT
+
+> Tài liệu này để **người mới đọc qua là chạy được ngay**.
+> Muốn hiểu sâu về thuật toán/thiết kế, đọc tiếp [`README.md`](README.md).
+> Muốn hiểu protocol MQTT của firmware, đọc [`docs/MQTT_PROTOCOL_ANALYSIS.md`](docs/MQTT_PROTOCOL_ANALYSIS.md).
+
+**Tool này để làm gì?** Ngồi nghe MQTT từ nhiều gateway IoT (LoRa → 4G/Ethernet) trong
+**3–4 ngày liên tục**, ghi lại mọi bản tin, đối chiếu với **ping** để tách lỗi mạng
+khỏi lỗi thiết bị, rồi chốt ra **báo cáo ĐẠT / KHÔNG ĐẠT cho từng gateway**.
+
+Tool **không sửa** firmware và **không sửa** tool nào khác trong repo.
+
+---
+
+## 1. Cài đặt (làm 1 lần)
+
+### 1.1. Yêu cầu
+
+| Thành phần | Ghi chú |
+|---|---|
+| **Python 3.10+** (repo đang dùng 3.14) | Cần có `python` trong PATH |
+| **Windows / Linux / macOS** | Tool chạy tốt trên cả ba |
+| **Kết nối tới broker MQTT** | Broker thật, thường là LAN hoặc Internet |
+| **PyQt5** | Chỉ cần nếu mở **GUI**. Chạy `--headless` thì không cần |
+
+### 1.2. Cài thư viện
+
+Mở PowerShell tại thư mục tool rồi chạy:
+
+```powershell
+pip install -r requirements.txt
+```
+
+`requirements.txt` gồm: `paho-mqtt`, `requests`, `pyserial`, `PyQt5`.
+
+### 1.3. Bật UTF-8 cho console (Windows — **rất quan trọng**)
+
+Console Windows mặc định là `cp1252`, sẽ văng `UnicodeEncodeError` khi in tiếng Việt.
+**Luôn đặt biến môi trường này trước khi chạy:**
+
+```powershell
+$env:PYTHONUTF8 = "1"
+```
+
+> Nếu dùng `run.ps1` thì không cần quan tâm — script đã in ASCII thuần để tránh lỗi này.
+
+---
+
+## 2. Cách chạy
+
+### 2.1. Chạy GUI (dễ dùng, xem trực tiếp)
+
+```powershell
+$env:PYTHONUTF8 = "1"
+python main.py
+```
+
+hoặc dùng script tiện lợi (tự `pip install` rồi mở):
+
+```powershell
+.\run.ps1
+```
+
+### 2.2. Chạy KHÔNG GUI (khuyến nghị cho test 3–4 ngày)
+
+Ít rủi ro hơn: máy không cần màn hình, không sợ GUI treo, dữ liệu vẫn ghi đầy đủ.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+python main.py --headless
+python main.py --headless --hours 72          # tự dừng sau 72 giờ
+```
+
+hoặc:
+
+```powershell
+.\run.ps1 -Headless -Hours 72
+```
+
+**Dừng bằng `Ctrl+C`:** tool sẽ xử lý nốt hàng đợi → ghi báo cáo → cập nhật
+`meta.json`. Không tắt bằng cách đóng cửa sổ.
+
+### 2.3. Các tuỳ chọn dòng lệnh
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--headless` | Không mở GUI (vẫn nhận MQTT, ghi CSV, ping, chốt báo cáo) |
+| `--hours N` | Tự dừng sau N giờ (**chỉ dùng kèm `--headless`**) |
+| `--config-dir PATH` | Dùng thư mục cấu hình khác (mặc định `config/`) |
+| `--log-level` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `--version` | In phiên bản tool |
+
+### 2.4. Tham số của `run.ps1`
+
+| Tham số | Ý nghĩa |
+|---|---|
+| `-Headless` | Chạy không GUI |
+| `-Hours N` | Dừng sau N giờ |
+| `-Python PATH` | Chỉ định Python khác |
+| `-LogLevel` | Mức log |
+| `-Install` / `-NoInstall` | Bắt buộc / bỏ qua `pip install` |
+| `-Test` | Chạy smoke test + GUI smoke test rồi thoát |
+
+---
+
+## 3. Chuẩn bị trước khi test (làm 1 lần, ~5 phút)
+
+### 3.1. Khai báo broker — tab **⚙ Cấu hình**
+
+Mở GUI → tab **⚙ Cấu hình**, điền:
+
+| Trường | Ví dụ / mặc định |
+|---|---|
+| **Host *** | `45.117.170.179` |
+| **Port *** | `1885` (kiểm tra lại với người quản lý broker — repo này dùng 1885) |
+| **Username / Password** | Để trống nếu broker không yêu cầu |
+| **Client ID** | Để trống = tự sinh |
+| **Topic chính *** | `node/#` |
+| **Topic bổ sung** | (tuỳ chọn) |
+| **Topic log** | `+/+/log` — chỉ dùng khi tick ô bật log gateway |
+
+Bấm **🔌 Kiểm tra kết nối broker** để chắc chắn thông. Sau đó bấm **💾 Lưu cấu hình**.
+
+> ⚠️ Sửa cấu hình **không** áp vào phiên đang chạy. Cứ lưu trước khi bấm Bắt đầu.
+
+### 3.2. Khai báo danh sách gateway — tab **🛰 Thiết bị**
+
+Mỗi gateway cần: **UID** (11–12 hex), **Tên** (dễ đọc), **IP mạng LAN** (để ping),
+và 2 ô tick **đưa vào phiên test** / **bật ping**.
+
+- **➕ Thêm gateway** — thêm dòng mới
+- **✎ Sửa** — sửa UID / tên / IP
+- **🗑 Xoá** — bỏ khỏi danh sách theo dõi
+- **⏻ Bật/Tắt** — tạm loại gateway khỏi phiên mà không xoá
+
+Danh sách cũng lưu ở `config/devices.json`, sửa tay được:
+
+```json
+[
+  { "uid": "E006199E139C", "name": "MGWI-V1-26070012", "eth_ip": "192.168.10.101",
+    "enabled": true, "ping_enabled": true, "notes": "" }
+]
+```
+
+> **Lưu ý:** UID có thể là **11 hoặc 12 hex** (firmware không zero-pad). Tool tự chuẩn
+> hoá nên hai dạng luôn nhận ra cùng một gateway — bạn nhập kiểu nào cũng được.
+
+---
+
+## 4. Quy trình test dài ngày (3–4 ngày)
+
+```mermaid
+flowchart LR
+    A[Chuẩn bị config<br/>+ devices] --> B[Bấm ▶ Bắt đầu test]
+    B --> C[Theo dõi tab Giám sát<br/>vài lần/ngày]
+    C --> D[Hết thời gian<br/>bấm ■ Dừng và ghi báo cáo]
+    D --> E[Xem reports/gateway_result.csv<br/>+ tab Lịch sử phiên]
+```
+
+1. **Cấu hình** broker + gateway (§3).
+2. (Khuyến nghị) Tick **Node trọng tâm** ở tab Giám sát — nhập UID một node đại diện
+   để đo **bắt hụt** (gateway khác nghe được mà gateway này không publish) và **bắn hụt**
+   (publish trễ). Xem §5.6.
+3. (Không bắt buộc) Gõ **Tên phiên** ở toolbar, ví dụ *"test lại GW 4F9199"*.
+4. Bấm **▶ Bắt đầu test**.
+5. Kiểm tra sức khoẻ định kỳ ở tab **📡 Giám sát** (§5.1). Nếu chạy headless thì xem
+   log ở `logs/test_gateway_iot.log` tiến độ in 10 phút/lần.
+6. Khi đủ thời gian → bấm **■ Dừng & ghi báo cáo** (hoặc `Ctrl+C` nếu headless).
+7. Xem kết quả ở tab **📜 Lịch sử phiên** (§5.4), đặc biệt cột **KẾT QUẢ**.
+
+> **Nút "📊 Ghi báo cáo ngay"** chốt báo cáo vào thư mục phiên mà **không dừng** test —
+> hữu ích để lấy kết quả tạm giữa chừng.
+
+---
+
+## 5. Hướng dẫn từng tab GUI
+
+GUI có 5 tab, xếp theo tần suất dùng: **📡 Giám sát → 🛰 Thiết bị → 🔍 Tìm kiếm → 📜 Lịch sử phiên → ⚙ Cấu hình**.
+
+### 5.1. 📡 Giám sát — trái tim của tool
+
+Toolbar trên cùng:
+
+| Nút | Việc nó làm |
+|---|---|
+| **▶ Bắt đầu test** | Mở phiên mới, bắt đầu nghe MQTT + ping |
+| **⏸ Tạm dừng** | Ngừng ghi (dữ liệu đang chờ vẫn được xử lý) |
+| **■ Dừng & ghi báo cáo** | Kết thúc phiên, chốt toàn bộ báo cáo |
+| **📊 Ghi báo cáo ngay** | Chốt báo cáo tạm mà không dừng |
+| **📂 Mở thư mục log** | Mở thư mục dữ liệu phiên hiện tại |
+| **Tên phiên** | Đặt tên trước khi chạy (không bắt buộc) |
+
+**8 thẻ chỉ số** (cập nhật mỗi 500 ms):
+
+| Thẻ | Cho biết |
+|---|---|
+| **Trạng thái** | IDLE / RUNNING / PAUSED / STOPPED / ERROR |
+| **Thời gian chạy** | Đã chạy bao lâu + giờ bắt đầu |
+| **Kết nối MQTT** | Đã kết nối chưa, số lần reconnect, uptime |
+| **Bản tin nhận được** | Tổng số + tách theo DATA / INFO / ERROR / LOG |
+| **Node/Gateway** | Số node phát hiện được + số gateway cấu hình |
+| **Chất lượng dữ liệu** | % thiếu SEQ + số thiếu / trùng / sai thứ tự |
+| **Ping gateway** | % ping OK + số thành công/tổng + **tổng thời gian downtime và số lần mất kết nối** |
+| **Ghi xuống đĩa** | Số dòng đã ghi + số dòng bỏ/lỗi ghi |
+
+**5 bảng con** (chọn ở các tab ngay dưới thẻ chỉ số):
+
+- **Bản tin trực tiếp** — các bản tin vừa nhận (bị giới hạn số dòng cho nhẹ GUI;
+  dữ liệu đầy đủ luôn nằm trong CSV).
+- **Tổng hợp node** — 1 dòng / node: số gói, SEQ đầu/cuối, thiếu/trùng/sai thứ tự,
+  tỉ lệ nhận.
+- **Cảnh báo** — node im lặng, gateway im lặng, tỉ lệ thiếu cao…
+- **Downtime** — **chi tiết từng khoảng gateway mất kết nối ping** (xem §6.2).
+- **Node trọng tâm** — bắt hụt / bắn hụt của node đang theo dõi (§5.6).
+
+Dưới cùng là khung **nhật ký (log)** của chính tool.
+
+### 5.2. 🛰 Thiết bị
+
+Quản lý danh sách gateway (thêm/sửa/xoá/bật-tắt). Cột **Tỉ lệ ping (%)** hiển thị
+tỉ lệ ping đã đo của từng gateway (tra theo UID, chịu được khác biệt 11/12 hex).
+Danh sách này lưu vào `config/devices.json`.
+
+### 5.3. 🔍 Tìm kiếm — tra cứu bản tin thô trong CSV
+
+Dùng để tìm chính xác một bản tin trong hàng trăm nghìn dòng mà không cần mở Excel.
+
+**Bộ lọc:**
+
+| Trường | Ví dụ |
+|---|---|
+| **Phạm vi** | Toàn bộ `data/runs/…`, hoặc chọn 1 phiên cụ thể |
+| **Gateway UID** | `4F9199E139C` (khớp một phần cũng được) |
+| **Receiver UID** | `64B5B30615E18000` (16 hex) |
+| **Node UID** | 16 hoặc 24 hex |
+| **SEQ** | `123` hoặc khoảng `100-200` |
+| **Loại bản tin** | (tất cả) / DATA / DATA_NO_SEQ / INFO / ERROR / LOG / UNKNOWN |
+| **Bất thường** | trùng, sai thứ tự, reset SEQ, giá trị cảm biến lạ… |
+| **Lỗi chứa** | `CRC ERROR`, `LENGTH`… |
+| **Từ khoá** | Bất kỳ chuỗi nào trong payload / topic |
+| **từ … đến** | Khoảng thời gian |
+| **Số dòng / trang** | Phân trang cho nhẹ RAM |
+
+**Nút:** **🔍 Tìm kiếm** · **◀ Trang trước** · **Trang sau ▶** ·
+**💾 Xuất kết quả ra CSV** · **📂 Mở thư mục dữ liệu**
+
+### 5.4. 📜 Lịch sử phiên — xem lại mọi phiên đã chạy
+
+Liệt kê **tất cả** phiên trong `data/runs/` (mới nhất trước), kể cả phiên bị **tắt
+ngang** (mất điện / kill / đóng console).
+
+**Cột danh sách phiên:** tên, mã phiên, bắt đầu, trạng thái, thời lượng, số gateway
+đã cấu hình, số gateway nghe được, tổng bản tin, số node, gói thiếu, ping fail,
+số báo cáo, dung lượng.
+
+**Nút:**
+
+| Nút | Việc nó làm |
+|---|---|
+| **🔄 Làm mới danh sách** | Quét lại `data/runs/` |
+| **Lọc** (combo) | Lọc theo trạng thái / kết quả |
+| **⚖ Chấm lại kết quả** | Tính lại ĐẠT/KHÔNG ĐẠT cho phiên cũ từ dữ liệu thô |
+| **Gateway** (ô tìm) | Tìm phiên theo UID hoặc tên gateway |
+| **✖ Xoá tìm kiếm** | Bỏ từ khoá, hiện lại mọi phiên |
+| **✏ Đặt / đổi tên phiên** | Ghi tên dễ đọc vào `meta.json` |
+| **🏷 Bổ sung tên gateway theo UID** | Điền tên gateway vào các phiên cũ thiếu tên |
+| **📂 Mở thư mục phiên** | Mở `data/runs/<phiên>/` |
+| **📊 Mở thư mục báo cáo** | Mở `reports/` của phiên |
+| **🔍 Xem bản tin thô trong Tìm kiếm** | Nhảy sang tab Tìm kiếm, khoanh sẵn đúng phiên đó |
+| **🗑 Xoá phiên này** | Xoá thư mục phiên (cẩn thận!) |
+
+**Các trang báo cáo** (mỗi trang đọc 1 file CSV): **Tổng kết**, **Kết quả**,
+**Node**, **Ping**, **MQTT ↔ Ping**, **Node trọng tâm**, **Bắt hụt theo SEQ**,
+**Bắn hụt (trễ)**, **Downtime**, **MQTT im lặng**, **Cảnh báo**.
+
+> Phiên cũ (chạy bằng bản tool chưa có `analytics/gateway_result.py`) không có trang
+> **Kết quả** → bấm **⚖ Chấm lại kết quả** để dựng lại. Nút này **chỉ đọc** dữ liệu
+> thô rồi **ghi thêm** báo cáo, tuyệt đối **không sửa** dữ liệu gốc.
+
+### 5.5. ⚙ Cấu hình
+
+Sửa mọi tham số: broker, TLS/reconnect, topic, SEQ, cảnh báo, ping, tương quan,
+node trọng tâm, storage, giao diện, logging. Bấm **🔌 Kiểm tra kết nối broker** để
+thử, **💾 Lưu cấu hình** để ghi vào `config/config.json`.
+
+Form bị **khoá trong lúc phiên đang chạy** (đổi ngưỡng giữa phiên sẽ làm sai thống kê).
+
+### 5.6. Node trọng tâm — đo "bắt hụt" và "bắn hụt"
+
+Nhập **UID một node** rồi bật theo dõi (ở tab Giám sát → *Node trọng tâm*).
+Tool so bản tin của node đó trên **mọi gateway**:
+
+- **BẮT HỤT** — node đã phát (gateway khác nghe được) mà gateway này **không publish**.
+- **BẮN HỤT** — gateway **có** publish nhưng **trễ** (`received_at − gateway_timestamp`
+  vượt `focused_node_late_seconds`, mặc định 30 s; dấu hiệu buffer SD / backfill).
+
+Đây là bằng chứng **trực tiếp** phân biệt "gateway yếu" với "node không phát" — quan
+trọng khi kết luận. Kết quả ghi vào `reports/focused_node_*.csv`.
+
+---
+
+## 6. Đọc kết quả
+
+### 6.1. Báo cáo ở đâu?
+
+Mỗi phiên tạo một thư mục `data/runs/<YYMMDD_HHMMSS>_<suffix>/`:
+
+```
+data/runs/<run_id>/
+├── meta.json                 # thông tin phiên (run_id, broker, gateway, tên, ngưỡng…)
+├── mqtt/                     # dữ liệu thô
+│   ├── mqtt_data_*.csv           # MỌI bản tin tool nhận được (36 cột)
+│   ├── mqtt_missing_*.csv        # các khoảng SEQ bị thiếu
+│   ├── mqtt_anomalies_*.csv      # bất thường (trùng, sai thứ tự, reset…)
+│   ├── mqtt_errors_*.csv         # khung node/error đã gộp
+│   ├── gateway_log_*.csv         # report hệ thống + Last Will (nếu bật)
+│   └── alerts_*.csv              # cảnh báo do tool sinh
+├── ping/                     # dữ liệu ping
+│   ├── ping_*.csv                # từng lần ping (RTT, thành công/thất bại)
+│   └── downtime_*.csv            # ⬅ sự kiện gateway mất/hồi phục (§6.2)
+└── reports/                  # báo cáo tổng hợp
+    ├── node_summary.csv
+    ├── ping_summary.csv
+    ├── correlation_summary.csv
+    ├── mqtt_silence.csv
+    ├── alerts_summary.csv
+    ├── run_summary.csv           # 1 dòng chốt cả phiên (kèm KẾT QUẢ)
+    ├── gateway_result.csv        # ⬅ ĐẠT / KHÔNG ĐẠT từng gateway (§6.3)
+    ├── gateway_downtime.csv      # ⬅ chi tiết downtime (§6.2)
+    └── focused_node_*.csv        # bắt hụt / bắn hụt
+```
+
+Tool **không** có database — **CSV là nguồn chân lý**. Đóng cửa sổ GUI không mất dữ liệu.
+
+### 6.2. ⏱ Downtime — thời gian ngắt kết nối ping
+
+**Downtime** = khoảng thời gian gateway **không trả lời ping** (ICMP). Đây là dữ liệu
+**chẩn đoán**, giúp bạn biết gateway mất mạng bao lâu — **nó vẫn luôn được hiển thị và
+xuất ra**, chỉ **không** dùng để chấm ĐẠT/KHÔNG ĐẠT (xem §6.3 để hiểu vì sao).
+
+**Downtime hiển thị ở 4 nơi:**
+
+| Nơi | Nội dung |
+|---|---|
+| Tab **📡 Giám sát** → thẻ **Ping gateway** | Tổng thời gian downtime của cả phiên + số lần mất kết nối, ví dụ `downtime 00:04:12 (2 lần)` |
+| Tab **📡 Giám sát** → bảng **Downtime** | Từng khoảng: **Bắt đầu mất**, **Hồi phục**, Gateway, IP, **Thời lượng (s)**, **Số ping fail**, **Trạng thái** (🔴 `ONGOING` = đang mất / 🟢 `CLOSED` = đã hồi phục) |
+| Tab **📜 Lịch sử phiên** → trang **Downtime** | Đọc `reports/gateway_downtime.csv`: Gateway, Tên, IP, **Bắt đầu mất**, **Hồi phục**, **Thời lượng (s)**, **Số ping fail**, **Trạng thái**, **Đã hồi phục**, **Ping fail cuối** |
+| Tab **📜 Lịch sử phiên** → trang **Ping** | Đọc `reports/ping_summary.csv`: cột **Số lần downtime**, **Downtime (s)** theo từng gateway |
+
+**Báo cáo ghi ra:**
+
+- `ping/downtime_*.csv` — từng sự kiện mất/hồi phục.
+- `reports/gateway_downtime.csv` — bảng chi tiết theo gateway.
+- `reports/ping_summary.csv` — cột `downtime_events`, `downtime_seconds` theo gateway.
+- `reports/run_summary.csv` — cột `downtime_events`, `downtime_seconds` cho cả phiên.
+- `reports/gateway_result.csv` — cột `downtime_events`, `downtime_seconds` (**tham khảo**).
+
+**Cách hoạt động:** cứ mỗi `ping_interval_seconds` (mặc định 10 s) tool ping song
+song từng gateway. Ping fail **liên tiếp** `ping_down_threshold` lần (mặc định 2) mới
+coi là **DOWN** → mở một cửa sổ downtime. Ping thành công trở lại → **đóng** cửa sổ và
+ghi lại `duration_seconds`. Nếu tool dừng khi cửa sổ còn mở, nó ghi trạng thái `ONGOING`.
+
+> **Quan trọng:** downtime là **tổng thời gian ping fail**, không phải "gateway hỏng".
+> Một gateway có MQTT **hoàn toàn khoẻ** vẫn tích luỹ downtime nếu **ICMP bị tường lửa
+> / ISP chặn** hoặc mạng chập chờn. Vì vậy đừng đọc downtime như kết luận hỏng máy —
+> hãy đối chiếu thêm `coverage_percent` và cột `verdict` (§6.3).
+
+### 6.3. Kết quả ĐẠT / KHÔNG ĐẠT — `reports/gateway_result.csv`
+
+Mở nhanh: **`reports/run_summary.csv`** có 4 cột chốt `gateways_passed`,
+`gateways_failed`, `result`, `result_reason` — 1 dòng là biết cả phiên đạt hay không.
+
+`gateway_result.csv` có **1 dòng mỗi gateway** + **1 dòng TỔNG** ở cuối
+(`gateway_uid = TỔNG`). Mỗi tiêu chí là 1 cột nhận `PASS` / `FAIL` / `N/A`.
+
+**4 tiêu chí** (đều là bằng chứng **trực tiếp**):
+
+| # | Cột | Tên | Đạt khi | Nguồn |
+|---|---|---|---|---|
+| 1 | `c_valid` | Có dữ liệu | gateway publish ≥ 1 bản tin | `mqtt_data_*.csv` |
+| 2 | `c_coverage` | Độ phủ bản tin | hụt ≤ `100 − criteria_min_coverage_percent` (%) | số bản tin publish / kỳ vọng |
+| 3 | `c_ping` | Tỉ lệ ping | ping OK ≥ `criteria_min_ping_ok_percent` (%) | `ping_summary.csv` |
+| 4 | `c_late` | Bắn hụt (gửi trễ) | % publish trễ ≤ `criteria_max_late_percent` | `focused_node_summary.csv` |
+
+**3 mức, không phải 2:** `N/A` = **chưa đủ dữ liệu để chấm** (chưa ping lần nào,
+chưa bật node trọng tâm, dưới `min_packets_for_rate`) — **khác hẳn** `FAIL`.
+
+**Một gateway ĐẠT chỉ khi không tiêu chí nào `FAIL`** (`N/A` không cản). Ngược lại là
+`KHÔNG ĐẠT`, và cột `result_reason` ghi rõ **tiêu chí nào hỏng kèm số so với ngưỡng**,
+ví dụ:
+
+```
+Độ phủ bản tin: hụt 23.50% (cho phép ≤ 20.00%);
+Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%)
+```
+
+> **Downtime KHÔNG nằm trong 4 tiêu chí trên.** Cùng bị loại khỏi kết luận còn có
+> `c_link` (Kết nối MQTT) và `c_stable` (Ổn định MQTT) — vì cả ba đều là **suy luận
+> gián tiếp**, có thể khiến gateway khoẻ bị "trượt oan".
+>
+> **NHƯNG các cột này VẪN đầy đủ trong CSV và vẫn hiển thị trên GUI:**
+> `downtime_events`, `downtime_seconds` (trang Ping & Downtime), `verdict`,
+> `windows_total`, `silence_windows`, `silence_percent` (trang MQTT ↔ Ping).
+> Chúng dùng để **chẩn đoán**, không dùng để chấm điểm.
+>
+> Cột `verdict` (tham khảo, **không** chấm điểm): `OK` (bình thường),
+> `PING_BLOCKED` (ping bị chặn nhưng MQTT vẫn chạy — **không phải lỗi gateway**),
+> `LINK_DOWN` / `GATEWAY_SILENT` (nghi vấn thật), `PARTIAL` (trộn nhiều kiểu),
+> `NO_DATA` (không đủ dữ liệu).
+
+### 6.4. Cấu hình ngưỡng chấm điểm
+
+| Khoá (`config.json`) | Mặc định | Nghĩa |
+|---|---|---|
+| `criteria_min_coverage_percent` | `80.0` | Cho phép hụt tối đa `100 − giá trị này` (%) |
+| `criteria_min_ping_ok_percent` | `90.0` | Ping OK tối thiểu (%) |
+| `criteria_max_late_percent` | `5.0` | % publish trễ tối đa (khi có node trọng tâm) |
+| `min_packets_for_rate` | `50` | Cỡ mẫu tối thiểu; dưới ngưỡng → `N/A` |
+
+Mỗi phiên lưu **ảnh chụp ngưỡng** vào `meta.json` (`scoring_params`) lúc bắt đầu, nên
+"Chấm lại kết quả" luôn cho **cùng kết quả** với lúc chốt — không phụ thuộc config hiện tại.
+
+---
+
+## 7. Kiểm tra trước khi mang đi test thật
+
+Không cần mạng, không cần broker, tự dọn thư mục tạm:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+
+python tests/smoke_test.py        # logic: config, parse, SEQ, CSV, báo cáo, session
+python -m pytest tests/ -q        # unit test (focused node, gateway result, rescore)
+python tests/gui_smoke_test.py    # dựng GUI rồi đóng (offscreen)
+python -m compileall -q .         # kiểm tra cú pháp toàn bộ file
+```
+
+Hoặc 1 lệnh: `.\run.ps1 -Test`
+
+Tất cả trả **exit code 0** khi đạt. `gui_smoke_test.py` sẽ **SKIP** (vẫn exit 0) nếu
+máy không có PyQt5.
+
+---
+
+## 8. Lỗi thường gặp & cách xử lý
+
+| Hiện tượng | Nguyên nhân / Cách xử lý |
+|---|---|
+| `UnicodeEncodeError` khi chạy script | Console Windows là `cp1252` → chạy `$env:PYTHONUTF8 = "1"` trước |
+| `ModuleNotFoundError: paho` / `requests` / `PyQt5` | Chưa `pip install -r requirements.txt`. Nếu chỉ chạy `--headless` thì **không cần** PyQt5 |
+| Thẻ **Kết nối MQTT** đỏ liên tục | Sai Host/Port/username/password, hoặc broker chặn. Bấm **🔌 Kiểm tra kết nối broker** ở tab Cấu hình |
+| Không thấy bản tin nào | Sai **topic chính** (mặc định `node/#`), hoặc chưa Bắt đầu test |
+| **Bản tin từ gateway lạ** tăng | UID không có trong `config/devices.json` → thêm vào tab Thiết bị. Dữ liệu vẫn được ghi đầy đủ |
+| Ping OK 0 % nhưng MQTT vẫn chạy | ICMP bị tường lửa/ISP chặn. Đọc cột `verdict` — `PING_BLOCKED` **không phải** lỗi gateway |
+| Downtime cao nhưng gateway gửi đều | Bình thường nếu ping bị chặn/chập chờn — downtime **không** phải kết luận hỏng (xem §6.2) |
+| Bảng **Bản tin trực tiếp** chỉ hiện vài nghìn dòng | Cố ý giới hạn cho nhẹ GUI. Dữ liệu đầy đủ trong `mqtt/mqtt_data_*.csv` |
+| Tab Giám sát không cập nhật | Bấm **🔄** / chuyển tab / kiểm tra thẻ **Trạng thái**. GUI lag **không** làm mất dữ liệu |
+| Cảnh báo `QFontDatabase: Cannot find font directory` (offscreen) | Vô hại |
+| `OverflowError` khi mở cửa sổ | Có `QSpinBox` bị đặt trần > int32 (2 147 483 647). Hạ giá trị trong config |
+| Phiên còn `status = RUNNING` dù đã tắt | Phiên bị tắt ngang (mất điện/kill). Dữ liệu tới lúc tắt vẫn còn; bấm **⚖ Chấm lại kết quả** để có báo cáo |
+| Muốn xoá phiên test | Tab Lịch sử phiên → **🗑 Xoá phiên này** (không thể hoàn tác) |
+
+---
+
+## 9. Vài lưu ý cho người mới
+
+- **Thẻ "Ping gateway" ở tab Giám sát có 2 vai trò:** vừa cho biết ping OK bao nhiêu %,
+  vừa cho biết **tổng thời gian downtime và số lần mất kết nối** — xem ngay con số
+  đó khi cần biết gateway mất mạng bao lâu.
+- **Downtime là để xem, không phải để phán.** Muốn kết luận gateway đạt hay không, hãy
+  xem `reports/gateway_result.csv` (hoặc trang **Kết quả** ở tab Lịch sử phiên).
+- **Muốn chắc chắn một gateway "yếu" là do nó hay do node:** bật **Node trọng tâm**
+  (§5.6) để đo **bắt hụt** — gateway khác nghe được mà nó không publish.
+- **Không sửa cấu hình giữa phiên** — ngưỡng sẽ không khớp thống kê.
+- **Không commit thư mục `data/`** — nặng hàng GB và đã nằm trong `.gitignore`.
+
+---
+
+## 10. Tham khảo thêm
+
+- [`README.md`](README.md) — tài liệu kỹ thuật đầy đủ (thuật toán, ràng buộc thiết kế,
+  giới hạn đã biết, ý nghĩa mọi chỉ số, lịch sử phiên).
+- [`docs/MQTT_PROTOCOL_ANALYSIS.md`](docs/MQTT_PROTOCOL_ANALYSIS.md) — phân tích protocol
+  MQTT đọc trực tiếp từ firmware.
+- `docs/Danh sach 55 gateway.csv` — danh sách gateway tham chiếu.
+</content>
+</invoke>
