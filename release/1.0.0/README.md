@@ -23,7 +23,7 @@ Test_Gateway_IoT/
 │   └── devices.json         # danh sách gateway cần theo dõi
 ├── core/                    # config, models, parser, UID, pipeline, paths
 ├── storage/                 # schema CSV, CsvSink, reader (search), RunSession
-├── analytics/               # SEQ tracker, ping stats, correlation, anomaly
+├── analytics/               # SEQ tracker, ping stats, correlation, chấm điểm, chốt lại
 ├── runtime/                 # MQTT subscriber, ping monitor, MonitorRunner
 ├── ui/                      # PyQt5: 5 tab (Giám sát / Thiết bị / Tìm kiếm / Lịch sử phiên / Cấu hình)
 ├── docs/                    # phân tích protocol firmware
@@ -232,6 +232,71 @@ ngay gateway nào đang mất kết nối mà không phải mở CSV:
   "chưa có dữ liệu"). Tooltip ô có `số thành công / tổng`, số lần thất bại và RTT
 trung bình.
 
+### Nhập danh sách thiết bị từ CSV (nút “📥 Nhập từ CSV”)
+
+Tab **Thiết bị** có nút **📥 Nhập từ CSV** để nạp cả danh sách gateway từ file
+bản thi công mạng, thay vì thêm tay từng dòng.
+
+**Đọc được nhiều bảng mã.** File người dùng gửi có thể là `CSV UTF-8` (có BOM),
+`UTF-8` thường, `CSV` (ANSI), hoặc cả **UTF-16** (mục *Save As → Unicode Text* của
+Excel). Trình nhập tự nhận BOM UTF-16 và cả UTF-16 bị mất BOM (nhờ mẫu byte NUL
+rải đều), rồi mới thử `utf-8-sig → utf-8 → cp1252 → latin-1` nên **không báo lỗi**
+với bất kỳ bảng mã nào. Khi phải dùng bảng mã ngoài UTF-8, hộp thoại hiện cảnh báo.
+Dấu phân cách `,` `;` `\t` `|` đều nhận được, dòng `sep=,` và dòng trống do Excel
+chèn bị bỏ qua.
+
+> **Vì sao phải nhận UTF-16 trước.** UTF-16 rơi xuống `cp1252` vẫn "đọc được"
+> (byte `0x00` hợp lệ với cp1252) nhưng ra văn bản đầy `\x00`: tiêu đề vỡ vụn, mọi
+> dòng báo "Không xác định được Gateway UID" — hỏng **âm thầm**, kèm cảnh báo đổ
+> lỗi sai cho bảng mã. Đây là ca đã bị bắt lúc ép thử.
+
+> **Vì sao chỉ một bảng mã ANSI, không phải cả cp1252 lẫn cp1258.** Đã đo toàn bộ
+> dải byte `0x80`–`0xFF`: **không byte nào cp1258 đọc được mà cp1252 từ chối** —
+> cp1252 bao trùm cp1258 hoàn toàn. Đặt cp1258 sau cp1252 thì không bao giờ chạy
+> tới; đặt trước thì nó **cướp file cp1252 và làm sai dấu âm thầm** (`0xE3` →
+> `ă` thay vì `ã`, `0xFD` → `ư` thay vì `ý`). Không thuật toán nào phân biệt được,
+> nên phải chọn một. File thi công thật đo ra là **cp1252**, vì vậy chọn cp1252.
+> Nếu gặp file lưu bằng cp1258 mà dấu bị sai, đổi `"cp1252"` thành `"cp1258"`
+> trong `ENCODING_CANDIDATES` ([core/device_import.py](core/device_import.py)).
+> (`latin-1` vẫn đứng cuối làm chốt hạ: nó đọc được mọi byte nên không bao giờ
+> ném lỗi.)
+
+**Dò cột theo cả tên lẫn giá trị.** Tiêu đề file thi công thật đã **mất dấu
+ngay trong file** (ví dụ `Mã qu?n lý GDO` — dấu `?` là byte thật, không bảng mã
+nào khôi phục được), nên không thể chỉ khớp tên cột. Tool dò theo 4 tầng: khớp
+đúng tên cột → **dò theo giá trị** (cột toàn IPv4 hợp lệ = cột IP) → khớp một
+phần → suy đoán cột tên (bỏ cột toàn số như `STT`).
+
+**Hộp thoại xem trước — lưới an toàn.** Vì ba cột tên trong file thật đều là
+chuỗi tự do, không có tín hiệu nào bảo đảm dò đúng, hộp thoại cho **chọn lại cột**
+Tên / IP / UID và hiện bảng xem trước từng dòng với trạng thái `Thêm mới` /
+`Đã có` / `Lỗi`. Nhập sai sẽ thấy ngay trước khi bấm OK.
+
+**Tick chọn từng gateway.** Bảng xem trước có **ô tick ở cột đầu** để chọn đúng
+những con cần đưa vào danh sách, kèm hai nút **Chọn hết** / **Bỏ chọn hết**.
+Dòng `Thêm mới` mặc định **tick sẵn**; dòng `Đã có` và dòng `Lỗi` **không tick
+được** (không vẽ ô tick — nhập cũng vô ích). Dòng đếm dưới bảng luôn nói rõ
+`Sẽ thêm N/M gateway đang tick`, và nút *Nhập vào danh sách* **khoá lại khi không
+còn dòng nào tick**. Bản thi công thường dài hơn số gateway đo trong một phiên,
+nên đây là cách chọn một nhóm con thay vì nhập hết rồi đi tắt từng con.
+
+> Lựa chọn được giữ theo **số dòng trong file**, không theo chỉ số bảng — nên đổi
+> cột ghép (combo) ở trên vẫn giữ nguyên những gì đã tick, kể cả khi bảng xem
+> trước phải cắt bớt dòng vì file quá dài (giới hạn 5000 dòng).
+
+**Gateway UID lấy từ đâu.** Ưu tiên cột UID trong file; nếu file **không có** cột
+UID (như bản thi công mạng — chỉ có `SN`) thì tra `SN` → cột `series` của danh
+mục nhà máy `docs/Danh sach 55 gateway.csv` → `uuid`. UID được zero-pad về **12
+hex** (độ dài 6–11 hex trong danh mục; đã đo danh mục thật có 1 dòng 9 hex và
+1 dòng 10 hex): firmware publish MAC đầy đủ 12 hex nên không pad sẽ không bao
+giờ khớp bản tin MQTT. Chuỗi ngắn hơn 6 hex không thể là MAC nên **giữ nguyên**,
+không pad — tránh đổi khoá tra cứu của những giá trị không phải UID thật.
+
+**Đã có thì bỏ qua.** Gateway đã nằm trong `devices.json` **không bị ghi đè** —
+giữ nguyên tên/IP bạn đã sửa tay. Dòng lỗi (IP sai định dạng, không tra được UID,
+trùng trong cùng file) **không được nhập** và hiện rõ lý do; nếu cả file không có
+gì mới, tool chỉ thông báo và không đổi gì.
+
 ### Delivery rate (tỉ lệ nhận) — **đọc kỹ trước khi kết luận**
 
 Firmware **không** cung cấp tổng số packet kỳ vọng và không có số thứ tự message
@@ -382,7 +447,7 @@ gateway chỉ đơn giản là chưa có số liệu.
 >   — nó chỉ là nhãn `verdict` do `analytics/correlation.py` suy ra từ việc so
 >   trạng thái **ping** với sự hiện diện của bản tin trong từng cửa sổ. Một gateway
 >   CÓ gửi MQTT nhưng cửa sổ rơi vào lúc ping fail vẫn bị gán `LINK_DOWN` /
->   `PARTIAL` → trượt oan (đo trên dữ liệu thật: cùng một gateway ra `PING_BLOCKED`
+>   `PARTIAL` → trượt oan (theo các phiên đã đo: cùng một gateway ra `PING_BLOCKED`
 >   ở phiên này và `PARTIAL` ở phiên khác, dù hành vi gửi y hệt).
 > * **“Ổn định MQTT” (`c_stable`).** Chỉ là tỉ lệ cửa sổ MQTT im lặng, phụ thuộc
 >   hoàn toàn vào `correlation_window_seconds` — gateway bật report chậm hơn cửa
@@ -414,7 +479,7 @@ tổng thể của gateway trong phiên:
 |---|---|---|
 | `OK` | Ping OK **và** MQTT có bản tin ở mọi cửa sổ đáng kể | Bình thường |
 | `PING_BLOCKED` | Ping **DOWN** nhưng MQTT vẫn **ACTIVE** | ICMP bị chặn (tường lửa/ISP), đường MQTT vẫn chạy. **Không phải lỗi gateway** — thực tế đã đo 3 gateway ~620 000 bản tin toàn bộ cửa sổ `PING_BLOCKED` nhưng hoạt động tốt. |
-| `LINK_DOWN` / `GATEWAY_SILENT` | Ping DOWN kèm MQTT im lặng, hoặc ping OK mà MQTT im lặng | Nghi vấn **thật** → xem `coverage_percent`, `silence_percent` và `gap_pattern` |
+| `LINK_DOWN` / `GATEWAY_SILENT` | Ping DOWN kèm MQTT im lặng, hoặc ping OK mà MQTT im lặng | Nghi vấn → xem `coverage_percent`, `silence_percent` và `gap_pattern` |
 | `PARTIAL` | Không kiểu bất thường nào chiếm ≥ 70 % số cửa sổ đáng ngờ | Trộn lẫn nhiều kiểu → xem số cụ thể của tiêu chí 2 |
 | `NO_DATA` / để trống | Không đủ dữ liệu correlation | Không kết luận gì |
 
@@ -483,7 +548,7 @@ trong `mqtt/` hay `ping/` bị ghi đè — có kiểm tra byte-for-byte trong
 
 | Tình huống | Hành vi |
 |---|---|
-| Phiên **đang chạy thật** (`run_id` trùng `active_run_id`) | **Nút tắt**; nếu cố bấm chỉ hiện cảnh báo — không chạy song song với lúc pipeline đang ghi `reports/` của chính phiên đó |
+| Phiên **tool đang chạy** (`run_id` trùng `active_run_id`) | **Nút tắt**; nếu cố bấm chỉ hiện cảnh báo — không chạy song song với lúc pipeline đang ghi `reports/` của chính phiên đó |
 | Phiên còn sót `status = RUNNING` nhưng **đã bị tắt ngang** | **Nút vẫn bật** — quyền quyết định là `active_run_id`, không phải `status` trong `meta.json` (xem §8 “Nhãn trạng thái”) |
 | Phiên thiếu `mqtt/mqtt_data_*.csv` | Báo lỗi, không chấm (độ phủ bản tin không có nguồn nào khác) |
 | Phiên thiếu `ping/ping_*.csv` **và** không có `reports/ping_summary.csv` | Vẫn chấm được nhưng kèm cảnh báo; nhóm tiêu chí ping để `N/A` |
@@ -498,6 +563,59 @@ phiên chạy với `criteria_min_ping_ok_percent = 85` sẽ bị chấm lại b
 `90` trên máy hôm nay → ra kết quả khác dù dữ liệu không đổi. Đây cũng là quy tắc
 áp dụng khi `stop()` chốt báo cáo, nên kết quả chốt lúc chạy và kết quả chấm lại
 luôn nhất quán.
+
+Ảnh chụp này **cũng chốt node trọng tâm của phiên** (`focused_node_uid`,
+`focused_node_late_seconds`) — xem §4 “Chốt lại báo cáo cho phiên bị tắt đột ngột”.
+
+### Chốt lại báo cáo cho phiên bị TẮT ĐỘT NGỘT (nút “🧾 Chốt lại báo cáo”)
+
+Mất điện, Windows Update khởi động lại, hay bị kill trong Task Manager giữa lúc
+test để lại một phiên với **CSV thô còn nguyên** nhưng **`reports/` rỗng** và
+`meta.json` còn `status = RUNNING` + `ended_at` rỗng. Nút **⚖ Chấm lại kết quả**
+không đủ cho tình huống này vì nó **chỉ** ghi `gateway_result.csv`.
+
+Nút **🧾 Chốt lại báo cáo** (§8) dựng lại **toàn bộ** bộ báo cáo — đúng những gì
+`MonitorPipeline.write_reports()` ghi lúc phiên dừng sạch — rồi đánh dấu phiên là
+`REFINALIZED` (nhãn *“Đã chốt lại từ dữ liệu thô”*).
+
+**Bất biến quan trọng nhất vẫn là: KHÔNG sửa dữ liệu thô.** Nút chỉ **đọc**
+`mqtt/mqtt_data_*.csv`, `ping/ping_log_*.csv`, `mqtt/mqtt_gateway_log_*.csv`; chỉ
+**ghi** vào `reports/` và `meta.json`. Có kiểm tra byte-for-byte trong
+`tests/test_refinalize.py` và `tests/gui_smoke_test.py` §10f.
+
+Vì sao đọc lại CSV là **đủ** cho phần lớn báo cáo: mỗi dòng `mqtt_data_*.csv` là
+**một bản tin logic** đã gộp mọi bản copy của các gateway cùng nghe, nên nạp lại
+đúng thứ tự `received_at` vào `SequenceTracker` cho ra đúng chuỗi SEQ như lúc
+chạy — kể cả `missing` / `duplicate` / `seq_reset`.
+
+| Dựng lại được từ CSV | KHÔNG dựng lại được (cần trạng thái trong RAM) |
+|---|---|
+| `node_summary.csv`, `ping_summary.csv` | `gateway_downtime.csv` → **không tạo file**; số downtime vẫn đủ trong `ping_summary.csv` / `run_summary.csv` (tính lại từ ping thô) |
+| `correlation_summary.csv`, `mqtt_silence.csv` | Cảnh báo **IM LẶNG** và cảnh báo **HỒI PHỤC** (phụ thuộc “lần cuối thấy node/gateway”) |
+| `gateway_result.csv`, `run_summary.csv` | `parse_errors`, `queue_dropped`, `reconnects` trong `run_summary.csv` → để **trống**, không bịa `0` |
+| `focused_node_summary.csv` / `_missing` / `_late` (khi phiên có node trọng tâm) | |
+
+**`alerts_summary.csv` là trường hợp riêng.** Ba loại cảnh báo SEQ (mất gói /
+trùng / sai thứ tự) suy được từ cột `seq_status` của `mqtt_data_*.csv`, nhưng cảnh
+báo im lặng / hồi phục thì không. Vì vậy:
+
+- phiên **đã có** `alerts_summary.csv` → **giữ nguyên bản cũ** (bản của lúc chạy
+  đầy đủ hơn), tên file được báo lại trong `kept_existing`;
+- phiên **chưa có** → dựng lại phần suy được **và** kèm cảnh báo nói rõ phần nào
+  thiếu.
+
+Mọi thứ không dựng lại được đều được nêu trong `RefinalizeResult.warnings` và
+hiện lên hộp thoại kết quả — không bao giờ im lặng ghi số 0.
+
+| Tình huống | Hành vi |
+|---|---|
+| Phiên **tool đang chạy** (`run_id` trùng `active_run_id`) | **Nút tắt**; cố bấm chỉ hiện cảnh báo — không ghi song song với lúc pipeline đang ghi `reports/` |
+| Phiên còn sót `status = RUNNING` nhưng **đã bị tắt ngang** | **Nút bật** — quyền quyết định là `active_run_id`, không phải `status` |
+| Phiên **đã chốt báo cáo đầy đủ** | **Nút tắt** (không có gì để chốt lại); vẫn dùng được **⚖ Chấm lại kết quả** |
+| Phiên thiếu `mqtt/mqtt_data_*.csv` | Báo lỗi, không ghi file nào (`RefinalizeError`) |
+| Phiên thiếu ping | Vẫn chốt được, kèm cảnh báo; chỉ số ping trống |
+| Phiên bị tắt **ngay trong lúc tạm dừng** | Khoảng tạm dừng đang mở được **đóng lại** và phần nằm sau `pause_started_at` bị trừ khỏi thời lượng dựng lại |
+| `meta.json` chưa có `scoring_params` (phiên bản tool cũ) | Dùng ngưỡng **trong `config.json` hiện tại** + node trọng tâm hiện tại, kèm cảnh báo |
 
 **Chi phí.** Nút phải đọc lại toàn bộ CSV thô nên **chậm vài giây** với phiên dài
 (phiên 3–4 ngày có thể ~870 000 dòng ⇒ ~10 s). Việc chấm chạy trong `QThread`
@@ -544,7 +662,7 @@ Nút **⏸ Tạm dừng** trước đây chỉ đổi cờ trạng thái, nên c
 2. **Tool vẫn ping** — vòng lặp `PingMonitor._run_target` chỉ kiểm tra `_stop`, nên
    ICMP vẫn chạy đều và bộ đếm ping/s trên GUI vẫn nhảy.
 3. **Sinh dữ liệu giả khi tiếp tục** — cửa sổ im lặng và *cooldown* cảnh báo đều
-   tính theo giờ thật, nên vừa bấm **Tiếp tục** là có ngay loạt `NODE_SILENT` /
+   tính theo giờ, nên vừa bấm **Tiếp tục** là có ngay loạt `NODE_SILENT` /
    `GATEWAY_SILENT` cho quãng tool **cố ý** không nhận gì; và nếu lúc tạm dừng vẫn
    phát `PingRecord` fail thì quãng nghỉ dài hơn `ping_down_threshold ×
    ping_interval_seconds` sẽ bị ghi thành **cửa sổ downtime** trong
@@ -560,7 +678,7 @@ Cách sửa (bất biến cần giữ nếu sửa tiếp):
 | Khi **Tiếp tục** | `PingTracker.reset_failure_streaks()` xoá `consecutive_failures` (giữ `max_consecutive_failures`) để quãng nghỉ không bị ghép thành chuỗi fail; `AnomalyDetector.shift_baselines(secs)` đẩy `last_seen_dt`, `_last_gateway_seen`, `_last_alert_at` (và **không** đụng `_alerts`) |
 | Báo cáo | `run_summary.csv` và `meta.json` đều có `paused_seconds`; `duration_seconds` = **thời gian đo được** (đã trừ tạm dừng) nên so sánh giữa các phiên vẫn công bằng |
 
-GUI phản ánh trạng thái thật: thẻ **Thời gian chạy** hiện
+GUI phản ánh đúng trạng thái đo: thẻ **Thời gian chạy** hiện
 `⏸ (đang tạm dừng, đã nghỉ …)`, thẻ **Ping gateway** thêm `⏸ KHÔNG chạy ICMP`,
 còn trang **Tổng kết** của tab Lịch sử phiên tách riêng *Thời lượng đo được (giây)*
 và *Thời gian tạm dừng (giây)*. Phiên cũ (chưa có khoá tạm dừng) đọc lên mặc định
@@ -605,12 +723,13 @@ Chạy **trước khi** mang tool ra chạy 3-4 ngày. Cả hai đều KHÔNG c�
 cần broker MQTT và tự dọn thư mục tạm sau khi xong.
 
 ```powershell
-# 1) Logic: config, parse payload thật, phân tích SEQ, CSV, báo cáo, session
+# 1) Logic: config, parse payload, phân tích SEQ, CSV, báo cáo, session
 python tests/smoke_test.py
 
 # 2) Unit test (pytest) — gồm tests/test_focused_node.py cho bắt hụt / bắn hụt,
 #    tests/test_gateway_result.py cho kết quả ĐẠT / KHÔNG ĐẠT từng tiêu chí,
 #    tests/test_gateway_rescore.py (24 ca) cho việc chấm lại phiên cũ,
+#    tests/test_refinalize.py cho việc chốt lại báo cáo phiên bị tắt đột ngột,
 #    và tests/test_pause.py (15 ca) cho tạm dừng: đồng hồ đứng + ngừng ICMP
 python -m pytest tests/ -q
 
@@ -638,7 +757,7 @@ Lưu ý về console Windows: script in tiếng Việt nên cần UTF-8
 $env:PYTHONUTF8 = '1'
 ```
 
-Ghi chú khi gặp lỗi thật (đã từng xảy ra):
+Ghi chú khi gặp lỗi (đã từng xảy ra):
 
 - `OverflowError` khi dựng cửa sổ = có widget `QSpinBox` bị đặt trần vượt int32
   CÓ DẤU (tối đa 2147483647). `seq_max` của firmware là uint16 nên không cần
@@ -786,7 +905,8 @@ mapping)` trong `storage/session.py`.
 |---|---|
 | **🔄 Làm mới danh sách** | Quét lại `data/runs/`, cập nhật danh sách + trạng thái (dùng khi phiên đang chạy chuyển sang “Đã dừng”) |
 | **Lọc** (combo) | `Tất cả phiên` / `Đã chốt báo cáo` / `Tắt ngang / thiếu báo cáo` — lọc ngay trên bảng |
-| **⚖ Chấm lại kết quả** | Dựng lại ĐẠT / KHÔNG ĐẠT cho phiên đang chọn **từ CSV thô** rồi **ghi thêm** `reports/gateway_result.csv` + cập nhật `run_summary.csv`. **Không sửa** `mqtt/`/`ping/`. Dùng cho phiên chạy bằng bản tool cũ (chưa có kết quả). Tắt với phiên tool đang chạy thật (`active_run_id`). Xem §4 “Chấm lại kết quả cho phiên CŨ” |
+| **🧾 Chốt lại báo cáo** | Dựng lại **TOÀN BỘ** `reports/` của phiên bị **tắt đột ngột** **từ CSV thô** rồi đánh dấu `meta.json` là `REFINALIZED`. **Không sửa** `mqtt/`/`ping/`. Giữ nguyên `alerts_summary.csv` / `gateway_downtime.csv` nếu phiên đã có; phần không dựng lại được thì **nói rõ trong hộp thoại**, không bịa `0`. Tắt với phiên tool đang chạy và với phiên đã có đủ báo cáo. Xem §4 “Chốt lại báo cáo cho phiên bị TẮT ĐỘT NGỘT” |
+| **⚖ Chấm lại kết quả** | Dựng lại ĐẠT / KHÔNG ĐẠT cho phiên đang chọn **từ CSV thô** rồi **ghi thêm** `reports/gateway_result.csv` + cập nhật `run_summary.csv`. **Không sửa** `mqtt/`/`ping/`. Dùng cho phiên chạy bằng bản tool cũ (chưa có kết quả). Tắt với phiên tool đang chạy (`active_run_id`). Xem §4 “Chấm lại kết quả cho phiên CŨ” |
 | **Gateway:** (ô tìm kiếm) | Lọc bảng theo **UID hoặc tên gateway** (khớp một phần, không phân biệt hoa/thường, khớp cả biến thể UID 11/12 hex); **giao với** combo Lọc |
 | **✖ Xoá tìm kiếm** | Xoá từ khoá gateway, hiện lại mọi phiên |
 | **✏ Đặt / đổi tên phiên** | Đặt/sửa/xoá **tên phiên** của phiên đang chọn (kể cả phiên đang chạy) — ghi vào `meta.json` |
@@ -806,6 +926,15 @@ API đọc lịch sử nằm trong `storage/session.py`:
 - `fill_session_gateway_names(run_dir, mapping, overwrite=False)` → bổ sung tên gateway theo UID vào `meta.json` của phiên; mặc định **chỉ điền chỗ thiếu**, trả `{"added", "skipped", "unmatched", "changed"}`.
 - `normalize_session_label(text)` → gọt khoảng trắng + cắt còn 120 ký tự (tên phiên).
 - `set_session_label(run_dir, label)` → đặt/sửa/xoá **tên phiên** của một phiên đã chạy (lưu ngay vào `meta.json`).
+- `refinalize_session(run_dir, *, ended_at="", duration_seconds=None, reason=…)` → đóng khoảng tạm dừng còn mở, ghi mốc kết thúc + thời lượng **suy từ dữ liệu thô**, đặt `status = REFINALIZED`.
+- `describe_status(session, active_run_id)` → nhãn tiếng Việt, phân biệt *Đang chạy* / *Đã dừng* / *Tắt ngang (chưa chốt báo cáo)* / *Đã chốt lại từ dữ liệu thô*.
+
+Chốt lại báo cáo nằm trong `analytics/refinalize.py`:
+
+- `raw_sources(run_dir)` → `dict` liệt kê file thô (`mqtt_files`, `ping_files`, `log_files`, `reports`).
+- `has_raw_data(run_dir)` → phiên có `mqtt_data_*.csv` để dựng lại báo cáo không.
+- `refinalize_run(run_dir, *, write_single_csv, devices=(), focus_node="", late_seconds=30.0, params=None, paused_seconds=0.0, pause_started_at="", now_stamp="", progress=None)` → `RefinalizeResult` (danh sách file đã ghi, mốc kết thúc + thời lượng suy ra, `counts`, `warnings`, `kept_existing`); ném `RefinalizeError` nếu thiếu `mqtt_data_*.csv`. Nhận hàm ghi CSV thay vì `LogManager` để không phụ thuộc vòng vào `storage`.
+- `RefinalizeResult.summary_text()` → một dòng kết luận cho GUI/nhật ký.
 
 Chấm lại kết quả nằm trong `analytics/gateway_rescore.py`:
 
@@ -819,8 +948,8 @@ Danh mục UID → tên nằm trong `core/gateway_directory.py`:
 - `load_gateway_catalog(path=None)` → `{UID → tên}` đọc từ CSV (cột `uuid` + `series`); mặc định `docs/Danh sach 55 gateway.csv`, trả `{}` nếu không đọc được.
 - `lookup_gateway_names(source, path=None, catalog=None)` → tra tên cho một/nhiều UID (chuỗi, `GatewayDevice`, hoặc cặp `(uid, tên)`), khớp theo mọi biến thể UID.
 
-Trong mỗi dict lịch sử, `session_gateway_names` là **ảnh chụp thật** trong
-`meta.json` còn `gateway_names` là **bảng tra ưu tiên ảnh chụp** (chỉ rơi về
+Trong mỗi dict lịch sử, `session_gateway_names` là **ảnh chụp trong `meta.json`**,
+còn `gateway_names` là **bảng tra ưu tiên ảnh chụp** (chỉ rơi về
 `live_devices` khi phiên không có ảnh chụp) — nhờ vậy giao diện không bao giờ lấy
 tên từ `devices.json` để đè lên tên đã chốt của phiên cũ. `label` / `label_text`
 là **tên phiên** người dùng đặt (khác hoàn toàn với tên gateway).

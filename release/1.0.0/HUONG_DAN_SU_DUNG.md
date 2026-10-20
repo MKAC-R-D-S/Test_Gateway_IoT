@@ -11,9 +11,9 @@ Tool **không sửa** firmware và **không sửa** tool nào khác trong repo.
 
 ---
 
-## 0. Dùng ngay: chạy file `.exe` (không cần cài gì)
+## 0. Dùng ngay: chạy file `.exe`
 
-> Đây là cách dùng **chuẩn**. Tool đã được đóng gói sẵn — **không cần** cài Python,
+> Tool đã được đóng gói sẵn — **không cần** cài Python
 > PyQt5, `pip`, hay bất kỳ môi trường nào khác.
 
 **Cần những gì:**
@@ -39,13 +39,13 @@ D:\TestGatewayIoT\
 └── release.json                    ← manifest: phiên bản + SHA-256 từng file
 ```
 
-> ⚠️ **Đừng** chạy exe trực tiếp bên trong file `.zip`. Tool cần ghi `config\`,
+> ⚠️ **Không** chạy exe trực tiếp bên trong file `.zip`. Tool cần ghi `config\`,
 > `data\`, `logs\` **ngay cạnh file exe** — chạy trong `.zip` là mất dữ liệu.
 
 ### Bước 2 — Nháy đúp `TestGatewayIoT.exe`
 
-- **GUI mở ra**, kèm một **cửa sổ console đen**. Cửa sổ đó là **cố ý** (dùng để xem
-  log và chạy chế độ không GUI) — đừng đóng nó.
+- **GUI mở ra**, kèm một **cửa sổ console đen**. Cửa sổ đó là dùng để xem
+  log và chạy chế độ không GUI.
 - **Lần chạy đầu**, tool tự tạo `config\config.json` + `config\devices.json` cạnh exe
   bằng cách copy bản mẫu đi kèm. Các lần sau nó **không ghi đè** nữa.
 - **SmartScreen** có thể hiện *"Windows protected your PC"* ở lần đầu: bản build nội
@@ -102,7 +102,7 @@ Muốn tự build lại exe để gửi cho người khác → **mục 11**.
 |---|---|
 | **Python 3.10+** (repo đang dùng 3.14) | Cần có `python` trong PATH |
 | **Windows / Linux / macOS** | Chạy mã nguồn thì tool chạy tốt trên cả ba. Bản `.exe` chỉ có cho **Windows 64-bit** |
-| **Kết nối tới broker MQTT** | Broker thật, thường là LAN hoặc Internet |
+| **Kết nối tới broker MQTT** | Broker của bạn, thường là LAN hoặc Internet |
 | **PyQt5** | Chỉ cần nếu mở **GUI**. Chạy `--headless` thì không cần |
 
 > Dùng file `.exe` thì **không cần** Python, PyQt5 hay pip — xem mục 0.
@@ -231,6 +231,57 @@ và 2 ô tick **đưa vào phiên test** / **bật ping**.
 - **✎ Sửa** — sửa UID / tên / IP
 - **🗑 Xoá** — bỏ khỏi danh sách theo dõi
 - **⏻ Bật/Tắt** — tạm loại gateway khỏi phiên mà không xoá
+- **📥 Nhập từ CSV** — nạp cả danh sách từ file (xem mục dưới)
+
+#### 📥 Nhập cả danh sách từ file CSV
+
+Thay vì gõ tay từng gateway, bấm **📥 Nhập từ CSV** rồi chọn file **bản thi công
+mạng** (file `.csv` bên thi công gửi). Tool tự lấy: **UID**, **tên**, **địa chỉ IP**.
+
+1. Bấm **📥 Nhập từ CSV** → chọn file.
+2. Hộp thoại **xem trước** hiện ra: chọn lại cột nếu tool dò sai (ô *Cột Tên* /
+   *Ethernet IP* / *Gateway UID*), và xem bảng kết quả từng dòng.
+   - `Thêm mới` — sẽ được thêm vào danh sách
+   - `Đã có` — đã nằm trong danh sách, **giữ nguyên**, không ghi đè
+   - `Lỗi` — không nhập, có ghi rõ lý do ở cột *Ghi chú*
+3. **Tick chọn từng gateway muốn test** ở cột đầu bảng (xem mục dưới).
+4. Bấm **Nhập vào danh sách**. Danh sách được lưu ngay vào `config/devices.json`.
+
+**Chọn gateway nào để test.** Bảng xem trước có **ô tick ở cột đầu tiên** — tick
+đúng những con bạn muốn đưa vào danh sách theo dõi.
+
+- Dòng `Thêm mới` **được tick sẵn**; dòng `Đã có` và `Lỗi` **không tick được**
+  (nhập cũng vô ích), nên bạn không cần bận tâm hai loại dòng đó.
+- Muốn lấy hết: bấm **Chọn hết**. Muốn bỏ hết rồi tick lại từ đầu: **Bỏ chọn hết**.
+- Dòng chữ dưới bảng luôn cho biết đang chọn bao nhiêu, ví dụ
+  *Sẽ thêm **12**/38 gateway đang tick*. **Bỏ tick hết** thì nút *Nhập vào danh
+  sách* bị khoá — không sợ bấm nhầm khi chưa chọn gì.
+- Nếu đổi ô *Cột Tên* / *Ethernet IP* / *Gateway UID* ở trên, tool dò lại bảng
+  nhưng **giữ nguyên những gì bạn đã tick**.
+
+> Dùng khi nào: bản thi công có thể liệt kê cả chục gateway mà mỗi phiên đo bạn
+> chỉ cần một nhóm. Nhập cả danh sách rồi đi tắt từng con sẽ mất công hơn.
+
+> **File Excel lưu kiểu nào cũng được.** Tool đọc được `CSV UTF-8` (khuyến nghị),
+> `UTF-8` thường, `CSV` (ANSI), và cả **Unicode Text** (UTF-16). Nếu hộp thoại hiện
+> cảnh báo về bảng mã thì vẫn dùng bình thường — chỉ là tên tiếng Việt có thể bị
+> lỗi dấu trong file. Khi lưu bằng Excel, nên chọn
+> **“CSV UTF-8 (Comma delimited)”**.
+>
+> **Riêng nhánh ANSI chỉ hỗ trợ một bảng mã.** Windows có nhiều bảng mã "ANSI"
+> khác nhau ghi ra byte y hệt nhau cho cùng một dấu (`ã` và `ă` đều là byte `E3`),
+> nên **không thể** đọc đúng cả hai — tool đã chọn bảng mã của file thi công thực
+> tế. Nếu bạn gặp tên gateway bị sai dấu kiểu `Mă` thay vì `Mã`, hãy **lưu lại
+> file thành `CSV UTF-8`** rồi nhập lại — đó là cách chắc chắn nhất, và cũng là
+> khuyến nghị chung.
+
+> **File thi công có thể không có cột UID/MAC** — thường chỉ có **số serial**
+> (SN). Tool tự tra SN đó trong danh mục nhà máy (`docs/Danh sach 55 gateway.csv`)
+> để ra UID. Nếu SN không có trong danh mục, dòng đó bị đánh `Lỗi` và **không
+> được nhập** — bạn thêm tay gateway đó sau.
+
+> **Không sợ nhập trùng.** Gateway đã có trong danh sách sẽ bị **bỏ qua**, tên và
+> IP bạn đã sửa tay **không bị ghi đè**. Nhập lại cùng file nhiều lần cũng an toàn.
 
 Danh sách cũng lưu ở `config/devices.json`, sửa tay được:
 
@@ -241,8 +292,9 @@ Danh sách cũng lưu ở `config/devices.json`, sửa tay được:
 ]
 ```
 
-> **Lưu ý:** UID có thể là **11 hoặc 12 hex** (firmware không zero-pad). Tool tự chuẩn
-> hoá nên hai dạng luôn nhận ra cùng một gateway — bạn nhập kiểu nào cũng được.
+> **Lưu ý:** UID có thể là **ngắn hơn 12 hex** (firmware không zero-pad, thường là
+> 11 hoặc 12 nhưng danh mục nhà máy có dòng chỉ còn 9–10 hex). Tool tự chuẩn hoá nên
+> hai dạng luôn nhận ra cùng một gateway — bạn nhập kiểu nào cũng được.
 
 ---
 
@@ -289,14 +341,14 @@ Toolbar trên cùng:
 | **📂 Mở thư mục log** | Mở thư mục dữ liệu phiên hiện tại |
 | **Tên phiên** | Đặt tên trước khi chạy (không bắt buộc) |
 
-> **Nút "⏸ Tạm dừng" là thật, không phải chỉ đổi nhãn.** Khi tạm dừng:
+> **Nút "⏸ Tạm dừng" thực sự ngừng đo, không chỉ đổi nhãn.** Khi tạm dừng:
 >
 > - Tool **không ping** nữa — bộ đếm ping (thành công / thất bại / ping/s) **đứng yên**,
->   không sinh bản ghi ping nào. Nhờ vậy khoảng nghỉ **không** bị ghi thành downtime giả.
+>   không sinh bản ghi ping nào. Nhờ vậy khoảng nghỉ **không** bị ghi thành downtime.
 > - **Đồng hồ đứng**: thẻ *Thời gian chạy* hiện `⏸ (đang tạm dừng, đã nghỉ ...)`, và
 >   thời gian nghỉ **không** được tính vào `duration_seconds` của phiên.
-> - Bộ phát hiện im lặng được **dịch mốc** khi tiếp tục, nên không có loạt cảnh báo
->   `NODE_SILENT` / `GATEWAY_SILENT` giả cho quãng tool cố ý không nhận gì.
+> - Bộ phát hiện im lặng được **dịch mốc** khi tiếp tục, nên **không** có loạt cảnh báo
+>   `NODE_SILENT` / `GATEWAY_SILENT` cho quãng tool cố ý không nhận gì.
 > - Bấm **▶ Tiếp tục** để chạy lại; mọi thứ tiếp tục từ chỗ dừng, có ghi log rõ
 >   đã nghỉ bao nhiêu phút.
 
@@ -328,9 +380,12 @@ Dưới cùng là khung **nhật ký (log)** của chính tool.
 
 ### 5.2. 🛰 Thiết bị
 
-Quản lý danh sách gateway (thêm/sửa/xoá/bật-tắt). Cột **Tỉ lệ ping (%)** hiển thị
-tỉ lệ ping đã đo của từng gateway (tra theo UID, chịu được khác biệt 11/12 hex).
-Danh sách này lưu vào `config/devices.json`.
+Quản lý danh sách gateway (thêm/sửa/xoá/bật-tắt/**nhập từ CSV**). Cột
+**Tỉ lệ ping (%)** hiển thị tỉ lệ ping đã đo của từng gateway (tra theo UID, chịu
+được khác biệt 11/12 hex). Danh sách này lưu vào `config/devices.json`.
+
+Nếu bên thi công đã gửi **file danh sách gateway (CSV)**, không cần gõ tay: bấm
+**📥 Nhập từ CSV** — xem hướng dẫn đầy đủ ở **§3.2**.
 
 ### 5.3. 🔍 Tìm kiếm — tra cứu bản tin thô trong CSV
 
@@ -376,6 +431,7 @@ số báo cáo, dung lượng.
 |---|---|
 | **🔄 Làm mới danh sách** | Quét lại `data/runs/` |
 | **Lọc** (combo) | Lọc theo trạng thái / kết quả |
+| **🧾 Chốt lại báo cáo** | Dựng lại **cả bộ** báo cáo cho phiên bị **tắt đột ngột** rồi đánh dấu phiên đã chốt |
 | **⚖ Chấm lại kết quả** | Tính lại ĐẠT/KHÔNG ĐẠT cho phiên cũ từ dữ liệu thô |
 | **Gateway** (ô tìm) | Tìm phiên theo UID hoặc tên gateway |
 | **✖ Xoá tìm kiếm** | Bỏ từ khoá, hiện lại mọi phiên |
@@ -390,9 +446,41 @@ số báo cáo, dung lượng.
 **Node**, **Ping**, **MQTT ↔ Ping**, **Node trọng tâm**, **Bắt hụt theo SEQ**,
 **Bắn hụt (trễ)**, **Downtime**, **MQTT im lặng**, **Cảnh báo**.
 
-> Phiên cũ (chạy bằng bản tool chưa có `analytics/gateway_result.py`) không có trang
+> Phiên cũ (chạy bằng bản tool chưa có trang **Kết quả**) không có trang
 > **Kết quả** → bấm **⚖ Chấm lại kết quả** để dựng lại. Nút này **chỉ đọc** dữ liệu
 > thô rồi **ghi thêm** báo cáo, tuyệt đối **không sửa** dữ liệu gốc.
+
+#### Phiên bị tắt đột ngột — nút **🧾 Chốt lại báo cáo**
+
+Nếu tool/PC bị **tắt đột ngột** giữa lúc test (mất điện, Windows Update khởi động
+lại, bị kill trong Task Manager) thì dữ liệu thô vẫn còn nguyên trên đĩa nhưng bộ
+báo cáo **chưa kịp ghi** — phiên hiện là *“Tắt ngang (bị tắt đột ngột, chưa chốt
+báo cáo)”* và các trang báo cáo trắng.
+
+Bấm **🧾 Chốt lại báo cáo** ở tab **📜 Lịch sử phiên** để dựng lại **toàn bộ**
+báo cáo từ dữ liệu thô rồi đánh dấu phiên là *“Đã chốt lại từ dữ liệu thô”*.
+Tool hỏi xác nhận trước khi ghi.
+
+| Được dựng lại | Giữ nguyên bản cũ (không dựng được) |
+|---|---|
+| `node_summary.csv`, `ping_summary.csv` | `alerts_summary.csv` — nếu phiên **đã có** thì giữ; chỉ dựng lại phần suy được từ SEQ (mất gói / trùng / sai thứ tự), **không** dựng được cảnh báo im lặng và cảnh báo hồi phục |
+| `correlation_summary.csv`, `mqtt_silence.csv` | `gateway_downtime.csv` — cần trạng thái downtime trong RAM, không dựng lại được. Số downtime vẫn đủ trong `ping_summary.csv` / `run_summary.csv` |
+| `gateway_result.csv`, `run_summary.csv` | `parse_errors`, `queue_dropped`, `reconnects` trong `run_summary.csv` — để **trống**, không ghi `0` (ghi `0` là khẳng định sai) |
+| `focused_node_*.csv` — nếu phiên có theo dõi node trọng tâm | |
+
+> **Dữ liệu thô trong `mqtt/` và `ping/` KHÔNG bị sửa, xoá hay di chuyển.** Nút
+> chỉ **đọc** chúng rồi ghi vào `reports/` và cập nhật `meta.json`.
+>
+> Ba bộ đếm không dựng lại được nêu trên sẽ được **nói rõ trong hộp thoại kết
+> quả**, không im lặng bỏ qua.
+>
+> Nút **tắt** với phiên **tool đang chạy** (không được ghi song song với lúc
+> pipeline đang ghi `reports/`) và với phiên **đã có đủ báo cáo**.
+
+Từ bản này, `meta.json` của mỗi phiên còn chốt **node trọng tâm đang theo dõi**
+(`focused_node_uid`) và **ngưỡng trễ** (`focused_node_late_seconds`) trong
+`scoring_params`, nhờ vậy phiên cũ được chốt lại đúng node nó đã theo dõi — không
+phải theo node đang bật trong `config.json` hôm nay.
 
 ### 5.5. ⚙ Cấu hình
 
@@ -543,7 +631,7 @@ Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%)
 >
 > Cột `verdict` (tham khảo, **không** chấm điểm): `OK` (bình thường),
 > `PING_BLOCKED` (ping bị chặn nhưng MQTT vẫn chạy — **không phải lỗi gateway**),
-> `LINK_DOWN` / `GATEWAY_SILENT` (nghi vấn thật), `PARTIAL` (trộn nhiều kiểu),
+> `LINK_DOWN` / `GATEWAY_SILENT` (nghi vấn), `PARTIAL` (trộn nhiều kiểu),
 > `NO_DATA` (không đủ dữ liệu).
 
 ### 6.4. Cấu hình ngưỡng chấm điểm
@@ -560,7 +648,7 @@ Mỗi phiên lưu **ảnh chụp ngưỡng** vào `meta.json` (`scoring_params`)
 
 ---
 
-## 7. Kiểm tra trước khi mang đi test thật
+## 7. Kiểm tra trước khi chạy chính thức
 
 > Phần này dành cho người **chạy từ mã nguồn** (cần Python). Người dùng bản `.exe`
 > không cần chạy test — chỉ cần mở tool lên, kiểm tra broker thấy **xanh** ở tab
@@ -593,7 +681,7 @@ máy không có PyQt5.
 | Windows hiện *“Windows protected your PC”* | Bản build nội bộ **chưa ký số**. Bấm **More info → Run anyway** |
 | Antivirus xoá / chặn `TestGatewayIoT.exe` | Bản onefile của PyInstaller hay bị nhận nhầm. Thêm **ngoại lệ** cho thư mục tool trong antivirus |
 | Nháy đúp mà **không có gì xảy ra** | Kiểm tra còn **cửa sổ console đen** đang mở không (lỗi được in ở đó). Thử chạy bằng PowerShell để đọc lỗi trực tiếp |
-| Mở tool từ **trong file `.zip`** | Tool không ghi được `config/`/`data/`/`logs/`. **Giải nén ra thư mục thật** trước khi chạy |
+| Mở tool từ **trong file `.zip`** | Tool không ghi được `config/`/`data/`/`logs/`. **Giải nén ra thư mục riêng** trước khi chạy |
 | Không tạo được `config/` cạnh exe | Thư mục đặt ở nơi **chỉ đọc** (vd `C:\Program Files\) hoặc ổ mạng. Chuyển sang `D:\TestGatewayIoT\` |
 | Mất cấu hình / mất phiên cũ sau khi cập nhật | Đã **chuyển sang chỗ khác** thay vì chỉ thay file exe. `config/` + `data/` phải nằm **cùng** thư mục với exe |
 | Cửa sổ **console đen** hiện cùng GUI | **Cố ý** — đó là nơi in log và là chế độ `--headless`. Đừng đóng |
@@ -616,7 +704,7 @@ máy không có PyQt5.
 | Tab Giám sát không cập nhật | Bấm **🔄** / chuyển tab / kiểm tra thẻ **Trạng thái**. GUI lag **không** làm mất dữ liệu |
 | Cảnh báo `QFontDatabase: Cannot find font directory` (offscreen) | Vô hại |
 | `OverflowError` khi mở cửa sổ | Có `QSpinBox` bị đặt trần > int32 (2 147 483 647). Hạ giá trị trong config |
-| Phiên còn `status = RUNNING` dù đã tắt | Phiên bị tắt ngang (mất điện/kill). Dữ liệu tới lúc tắt vẫn còn; bấm **⚖ Chấm lại kết quả** để có báo cáo |
+| Phiên còn `status = RUNNING` dù đã tắt | Phiên bị tắt ngang (mất điện/kill). Dữ liệu tới lúc tắt vẫn còn; bấm **🧾 Chốt lại báo cáo** (§5.4) để dựng lại **cả bộ** báo cáo, hoặc **⚖ Chấm lại kết quả** nếu chỉ cần lại kết quả ĐẠT/KHÔNG ĐẠT |
 | Muốn xoá phiên test | Tab Lịch sử phiên → **🗑 Xoá phiên này** (không thể hoàn tác) |
 
 ---
@@ -695,7 +783,7 @@ Cả ba phải xanh: `pytest` báo số test **passed**, hai smoke test in
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_release.ps1 -Python c:\python314\python.exe
 ```
 
-Script tự làm hết: đọc phiên bản từ `core/__init__.py` → PyInstaller build → copy
+Script tự làm hết: đọc phiên bản hiện tại → PyInstaller build → copy
 `config/`, `docs/`, `HUONG_DAN_SU_DUNG.md`, `README.md` vào `release\1.0.0\` →
 sinh `release.json` → nén `.zip`.
 
@@ -754,7 +842,7 @@ git rev-parse origin/main     # phải in ra hash mới nhất = đã push thàn
   trong file `.py` (UTF-8).
 - **`c:\python314\python.exe -m PyInstaller`**, không gọi `pyinstaller` trực tiếp —
   thư mục `Scripts\` thường **không có** trên PATH.
-- Bản exe **tự bật UTF-8** (`force_utf8_console()` trong `main.py`), nên chạy exe
+- Bản exe **tự bật UTF-8** khi khởi động, nên chạy exe
   **không** cần `$env:PYTHONUTF8`; chỉ chạy **từ mã nguồn** mới cần.
 - `build/` và `dist/` là trung gian, đã bị `.gitignore`; `TestGatewayIoT.spec` là
   **mã nguồn build** nên phải commit.
@@ -765,7 +853,7 @@ git rev-parse origin/main     # phải in ra hash mới nhất = đã push thàn
 .\tools\build_release.ps1
 ```
 
-Script sẽ tự: đọc phiên bản từ `core/__init__.py` → build exe bằng PyInstaller →
+Script sẽ tự: đọc phiên bản hiện tại → build exe bằng PyInstaller →
 gom gói phát hành → sinh manifest JSON → nén ZIP.
 
 Kết quả trong `release/<phiên bản>/`:
@@ -813,26 +901,25 @@ git push
   **được commit** (đó là gói để up lên git).
 - **Console vẫn hiện** khi mở GUI. Đây là **cố ý**: nhờ vậy chế độ
   `--headless --hours 72` vẫn in được tiến độ, và lỗi khởi động vẫn đọc được.
-- **Bản exe tự bật UTF-8** (`force_utf8_console()` trong `main.py`), nên **không** cần
+- **Bản exe tự bật UTF-8** khi khởi động, nên **không** cần
   `$env:PYTHONUTF8`. *Không* có nó thì bản đóng gói rơi về `cp1252` và **mọi dòng log
   tiếng Việt đều ném `UnicodeEncodeError`**.
 - **Chữ trên cửa sổ console vẫn trông méo dấu** (PowerShell 5.1 render UTF-8 bằng
   code page `cp850`). Đây là **hiện tượng hiển thị, không phải lỗi dữ liệu** — file
   `logs/test_gateway_iot.log` trên đĩa luôn đúng UTF-8.
 - **Bản build KHÔNG ký số** → Windows SmartScreen sẽ cảnh báo ở lần chạy đầu. Xem 8.1.
-- **`requests` PHẢI có trong `hiddenimports`** của spec: `core/config.py::check_dependencies()`
-  gọi `__import__("requests")` bằng **chuỗi**, nên PyInstaller không tự phát hiện. Thiếu
-  nó là exe chết ngay với `Thiếu thư viện: requests`.
+- **`requests` PHẢI được đóng gói kèm** exe: tool nạp thư viện này theo tên chuỗi lúc
+  khởi động nên PyInstaller không tự phát hiện. Thiếu nó là exe chết ngay với
+  `Thiếu thư viện: requests`.
 - **`pyserial` không được đóng gói** — tool không import thư viện này ở đâu (nó chỉ
   có trong `requirements.txt` để tương thích với các tool khác cùng repo).
 - **Không có mã 4G/cellular nào trong bản build.** Tool chỉ dùng TCP/IP thường
   (MQTT + ICMP ping); xem mục 0.
-- **Đường dẫn khi chạy exe** do `core/paths.py` quyết định:
-  - `APP_ROOT` (ghi) = **thư mục chứa exe** → `config/`, `data/`, `logs/` nằm ở đây,
-    nên **không mất** khi đóng tool (thư mục tạm `_MEIPASS` bị PyInstaller xoá khi thoát).
-  - `RESOURCE_ROOT` (đọc) = `sys._MEIPASS` → nơi đọc file mẫu đi kèm.
-  - `resource_path()` ưu tiên file nằm **cạnh exe**, nên có thể ghi đè
-    `docs/Danh sach 55 gateway.csv` bằng bản riêng mà không cần build lại.
+- **Đường dẫn khi chạy exe:** thư mục chứa exe là nơi tool ghi `config/`, `data/`,
+  `logs/`, nên **không mất** khi đóng tool (thư mục tạm PyInstaller tạo bị xoá khi thoát).
+- File mẫu đi kèm (`docs/Danh sach 55 gateway.csv`…) được đọc từ trong gói, nhưng tool
+  **ưu tiên file nằm cạnh exe**, nên có thể ghi đè `docs/Danh sach 55 gateway.csv` bằng
+  bản riêng mà không cần build lại.
 - **Muốn lấy exe ra dùng riêng?** Chỉ cần **một** file `TestGatewayIoT.exe`. Lần chạy
   đầu nó tự sinh `config/` cạnh đó (copy bản mẫu nhúng bên trong).
 - **`release.json`** chứa **SHA-256 + kích thước từng file** — người nhận có thể verify
