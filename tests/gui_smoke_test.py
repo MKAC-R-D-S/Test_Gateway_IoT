@@ -382,6 +382,168 @@ def main() -> int:
             check(False, "kiểm tra cột tỉ lệ ping của tab Thiết bị",
                   "%s: %s" % (type(exc).__name__, exc))
 
+    # --- 6b. tab Thiết bị: nhập danh sách từ CSV --------------------------
+    # File nhập là file NGƯỜI DÙNG đưa vào (không phải file tool tự ghi), nên
+    # phải chịu được bảng mã ANSI + tiêu đề mất dấu. Xem tests/test_device_import.py
+    # cho phần logic thuần; ở đây kiểm đường đi qua giao diện.
+    print("\n[6b] Tab Thiết bị — nhập danh sách từ CSV")
+    try:
+        from unittest import mock
+
+        from core.device_import import ImportError_ as _ImportError
+        from ui.devices_tab import DevicesTab, ImportDevicesDialog
+
+        # File giống bản thi công mạng thật: cp1252, tiêu đề mất dấu thành `?`,
+        # KHÔNG có cột UID (phải tra qua SN → danh mục nhà máy).
+        # (`tempfile` đã import ở đầu file — ĐỪNG import lại trong hàm, sẽ làm nó
+        # thành biến cục bộ và vỡ mọi chỗ dùng `tempfile` ở trên.)
+        catalog = {"A006199E139C": "MGWI-V1-26070034"}
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "report.csv"
+            csv_path.write_bytes(
+                ("STT,Mã Gateway,SN,Mã qu?n lý GDO,Ð?a ch? IP\r\n"
+                 "1,GW-90,MGWI-V1-26070034,GDO-EMS-1F-GW90,192.84.91.10\r\n")
+                .encode("cp1252")
+            )
+            tab = DevicesTab([])
+            check(hasattr(tab, "btn_import"), "tab Thiết bị có nút '📥 Nhập từ CSV'")
+
+            dialog = ImportDevicesDialog(csv_path, [], catalog)
+            check(dialog.model.rowCount() == 1, "bảng xem trước có 1 dòng")
+            check(dialog.devices() and dialog.devices()[0].uid == "A006199E139C",
+                  "tra được UID qua SN → danh mục nhà máy",
+                  "nhận %r" % ([d.uid for d in dialog.devices()],))
+            check(dialog.devices()[0].name == "GDO-EMS-1F-GW90",
+                  "tên gợi nhớ lấy từ cột 'Mã qu?n lý GDO' dù tiêu đề mất dấu",
+                  "nhận %r" % (dialog.devices()[0].name,))
+            check(dialog.devices()[0].eth_ip == "192.84.91.10",
+                  "địa chỉ IP nhận đúng")
+            status_index = dialog.model.index(0, 4)
+            check(dialog.model.data(status_index) == "Thêm mới",
+                  "trạng thái dòng hiển thị 'Thêm mới'",
+                  "nhận %r" % (dialog.model.data(status_index),))
+            check(dialog.model.row_at(0).get("uid") == "A006199E139C",
+                  "bảng xem trước hiện đúng UID",
+                  "nhận %r" % (dialog.model.row_at(0),))
+
+            # --- tick chọn từng con ---------------------------------------
+            from PyQt5.QtCore import Qt as _Qt
+            pick = dialog.model.index(0, 0)
+            check(dialog.model.data(pick, _Qt.CheckStateRole) == _Qt.Checked,
+                  "dòng 'Thêm mới' mặc định đã tick sẵn")
+            check(bool(dialog.model.flags(pick) & _Qt.ItemIsUserCheckable),
+                  "ô tick bấm được")
+
+            dialog.model.setData(pick, _Qt.Unchecked, _Qt.CheckStateRole)
+            check(dialog.devices() == [],
+                  "bỏ tick dòng đó → không còn gì để nhập",
+                  "nhận %r" % ([d.uid for d in dialog.devices()],))
+            ok_btn = dialog.buttons.button(dialog.buttons.Ok)
+            check(not ok_btn.isEnabled(),
+                  "không còn dòng nào tick → khoá nút 'Nhập vào danh sách'")
+
+            dialog._set_all(True)
+            check(len(dialog.devices()) == 1 and ok_btn.isEnabled(),
+                  "nút 'Chọn hết' tick lại → mở khoá nút nhập")
+
+            # Dòng 'Đã có' và dòng 'Lỗi' phải KHÔNG tick được (nhập cũng vô ích).
+            mixed = Path(tmp) / "mixed.csv"
+            mixed.write_bytes(
+                ("STT,Mã Gateway,SN,Mã qu?n lý GDO,Ð?a ch? IP\r\n"
+                 "1,GW-90,MGWI-V1-26070034,GDO-MOI,192.84.91.10\r\n"
+                 "2,GW-91,MGWI-V1-99999999,GDO-HONG,192.84.91.11\r\n"
+                 "3,GW-92,MGWI-V1-26070034,GDO-CU,192.84.91.12\r\n")
+                .encode("cp1252")
+            )
+            mixed_dialog = ImportDevicesDialog(mixed, [], catalog)
+            statuses = [r.get("status") for r in mixed_dialog.model.rows()]
+            check(statuses == ["new", "error", "error"], statuses)
+            check(bool(mixed_dialog.model.flags(mixed_dialog.model.index(0, 0))
+                       & _Qt.ItemIsUserCheckable),
+                  "dòng 'Thêm mới' tick được")
+            check(not (mixed_dialog.model.flags(mixed_dialog.model.index(1, 0))
+                       & _Qt.ItemIsUserCheckable),
+                  "dòng 'Lỗi' KHÔNG tick được")
+            check(mixed_dialog.model.data(mixed_dialog.model.index(1, 0),
+                                          _Qt.CheckStateRole) is None,
+                  "dòng 'Lỗi' không vẽ ô tick nào")
+            check(len(mixed_dialog.devices()) == 1,
+                  "chỉ nhập dòng đang tick, không nhập dòng lỗi",
+                  "nhận %r" % ([d.uid for d in mixed_dialog.devices()],))
+            mixed_dialog._set_all(True)
+            check(len(mixed_dialog.devices()) == 1,
+                  "'Chọn hết' không kéo theo được dòng lỗi")
+
+            # Đổi cột ghép (combo) phải GIỮ lựa chọn đã tick.
+            dialog.model.setData(pick, _Qt.Checked, _Qt.CheckStateRole)
+            dialog.cmb_name.setColumn(3)
+            check(len(dialog.devices()) == 1,
+                  "đổi cột Tên xong vẫn giữ đúng các dòng đã tick",
+                  "nhận %r" % ([d.uid for d in dialog.devices()],))
+
+            # Bảng bị cắt bớt (`max_rows`) thì nút 'Bỏ chọn hết' vẫn phải bỏ được
+            # cả những dòng KHÔNG hiện trên bảng — nếu chỉ sửa dòng đang hiện,
+            # dòng đã bị cắt vẫn tick và tool nhập thứ người dùng không thấy.
+            wide = Path(tmp) / "nhieu.csv"
+            wide.write_bytes(
+                ("ten,uid,ip\r\n" + "".join(
+                    "G%02d,%012X,192.84.91.%d\r\n" % (i, 0xA00000000000 + i, 10 + i)
+                    for i in range(6)
+                )).encode("utf-8")
+            )
+            wide_dialog = ImportDevicesDialog(wide, [], {})
+            check(len(wide_dialog.devices()) == 6, "6 dòng đều tick sẵn")
+            wide_dialog.model.set_max_rows(2)
+            check(wide_dialog.model.rowCount() == 2,
+                  "bảng chỉ còn hiện 2/6 dòng (bị cắt bớt)")
+            wide_dialog._set_all(False)
+            check(wide_dialog.devices() == [],
+                  "'Bỏ chọn hết' bỏ được cả dòng đã bị cắt khỏi bảng",
+                  "nhận %r" % ([d.uid for d in wide_dialog.devices()],))
+            wide_dialog._set_all(True)
+            check(len(wide_dialog.devices()) == 6,
+                  "'Chọn hết' lấy lại đủ cả dòng đã bị cắt khỏi bảng")
+
+            # File rỗng / không mở được → ném ImportError_ để UI báo hộp thoại.
+            empty = Path(tmp) / "rong.csv"
+            empty.write_bytes(b"")
+            try:
+                ImportDevicesDialog(empty, [], catalog)
+                check(False, "file rỗng phải ném ImportError_")
+            except _ImportError:
+                check(True, "file rỗng → ImportError_ (UI báo lỗi, không sập)")
+
+        # _on_import: người dùng Cancel hộp chọn file → không đổi gì.
+        class _FakeFileDialog:
+            @staticmethod
+            def getOpenFileName(*_args, **_kwargs):
+                return ("", "")
+
+        class _FakeMsgBox:
+            calls = []
+
+            @staticmethod
+            def warning(*args, **_kwargs):
+                _FakeMsgBox.calls.append(("warning", args[1] if len(args) > 1 else ""))
+
+            @staticmethod
+            def information(*args, **_kwargs):
+                _FakeMsgBox.calls.append(("information", args[1] if len(args) > 1 else ""))
+
+        tab2 = DevicesTab([])
+        _FakeMsgBox.calls = []
+        with mock.patch("ui.devices_tab.QFileDialog", _FakeFileDialog), \
+                mock.patch("ui.devices_tab.QMessageBox", _FakeMsgBox):
+            tab2._on_import()
+        check(tab2.devices() == [], "Cancel hộp chọn file → không thêm gateway nào")
+        check(_FakeMsgBox.calls == [], "Cancel hộp chọn file → không hiện hộp thoại nào",
+              "nhận %r" % (_FakeMsgBox.calls,))
+    except Exception as exc:  # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        check(False, "kiểm tra nhập danh sách thiết bị từ CSV",
+              "%s: %s" % (type(exc).__name__, exc))
+
     # --- 7. tab Tìm kiếm: cột "Gateway cùng nghe" đã bị bỏ -----------------
     # Chốt chống tái phát cho yêu cầu "bỏ cột gateway cùng nhận".
     print("\n[7] Tab Tìm kiếm — đã bỏ cột 'Gateway cùng nghe'")

@@ -178,6 +178,91 @@ class DictTableModel(QAbstractTableModel):
 
 
 # ---------------------------------------------------------------------------
+# Bảng có cột tick
+# ---------------------------------------------------------------------------
+class CheckableDictTableModel(DictTableModel):
+    """`DictTableModel` + một cột tick chọn dòng (dùng ở hộp thoại nhập CSV).
+
+    Vì sao là lớp con chứ không sửa `DictTableModel`: model cũ đang được mọi tab
+    dùng (bảng live, alert, tìm kiếm…). Thêm cột tick vào đó là đổi hành vi của
+    tất cả; ở đây chỉ thêm khả năng, không đụng gì tới lớp cha.
+
+    Trạng thái tick lưu thẳng vào dict của dòng (khoá `CHECK_KEY`) nên
+    `reset_rows()` không làm mất, miễn người gọi giữ lại dict cũ.
+
+    Dòng **không tick được** (`checkable(row)` trả False) thì KHÔNG vẽ ô tick nào,
+    thay vì vẽ ô xám bị vô hiệu hoá. Với hộp thoại nhập, đó là cách nói rõ hơn
+    "dòng này nhập cũng vô ích" (đã có trong danh sách / bị lỗi).
+    """
+
+    #: Khoá trong dict của dòng giữ trạng thái tick.
+    CHECK_KEY = "_check"
+
+    def __init__(
+        self,
+        columns: Sequence[str],
+        headers: Optional[Sequence[str]] = None,
+        max_rows: int = 2000,
+        color_column: str = "",
+        color_map: Optional[Dict[str, str]] = None,
+        formatters: Optional[Dict[str, Callable[[Any], str]]] = None,
+        checkable: Optional[Callable[[Dict[str, Any]], bool]] = None,
+        parent=None,
+    ) -> None:
+        super().__init__(
+            columns,
+            headers,
+            max_rows=max_rows,
+            color_column=color_column,
+            color_map=color_map,
+            formatters=formatters,
+            parent=parent,
+        )
+        # Không truyền `checkable` ⇒ mọi dòng đều tick được.
+        self._checkable = checkable
+
+    def _row_checkable(self, row: Optional[Dict[str, Any]]) -> bool:
+        if row is None:
+            return False
+        if self._checkable is None:
+            return True
+        try:
+            return bool(self._checkable(row))
+        except Exception:  # noqa: BLE001 - predicate lỗi không được làm chết GUI
+            return False
+
+    # ---------------------------------------------------------------- Qt API
+    def flags(self, index):
+        base = super().flags(index)
+        if not index.isValid() or index.column() != 0:
+            return base
+        if not self._row_checkable(self.row_at(index.row())):
+            return base
+        return base | Qt.ItemIsUserCheckable
+
+    def data(self, index, role=Qt.DisplayRole):
+        if index.isValid() and index.column() == 0:
+            row = self.row_at(index.row())
+            if not self._row_checkable(row):
+                return None
+            if role == Qt.CheckStateRole:
+                return Qt.Checked if row.get(self.CHECK_KEY) else Qt.Unchecked
+            if role == Qt.DisplayRole:
+                return ""          # chỉ hiện ô tick, không hiện chữ
+        return super().data(index, role)
+
+    def setData(self, index, value, role=Qt.EditRole):  # noqa: N802
+        if role != Qt.CheckStateRole or not index.isValid() or index.column() != 0:
+            return False
+        row = self.row_at(index.row())
+        if not self._row_checkable(row):
+            return False
+        row[self.CHECK_KEY] = (value == Qt.Checked)
+        self.dataChanged.emit(index, index)
+        return True
+
+
+# ---------------------------------------------------------------------------
 # Định dạng dùng chung cho bảng
 # ---------------------------------------------------------------------------
 def fmt_int(value: Any) -> str:

@@ -23,9 +23,14 @@ import re
 
 HEX_RE = re.compile(r"^[0-9A-Fa-f]+$")
 
-#: Độ dài gateway UID đầy đủ theo firmware: `String(getEfuseMac(), HEX)` in ra
-#: 11 hoặc 12 ký tự (KHÔNG zero-pad) — xem `format_gateway_uid`.
+#: Độ dài gateway UID mà firmware THƯỜNG in ra: `String(getEfuseMac(), HEX)` bỏ
+#: các nibble 0 ở đầu nên thường còn 11 hoặc 12 ký tự. Chỉ để tham chiếu — việc
+#: zero-pad không dựa vào hằng số này.
 GATEWAY_UID_LENGTHS = (11, 12)
+
+#: Độ dài tối thiểu của một gateway UID (khớp `GATEWAY_UID_RE` ở `core/config.py`).
+#: Ngắn hơn mức này không thể là MAC nên `format_gateway_uid` giữ nguyên.
+GATEWAY_UID_MIN = 6
 # Quy ước nhà máy (main.h:100-106)
 UUID_MID = "15E18000"
 UUID_NEW_TAIL = "15E18000FC8B3004"
@@ -180,11 +185,29 @@ def format_gateway_uid(uid: str) -> str:
 
     Dùng khi cần ghi ra CSV hoặc so với danh sách thiết bị, để gateway 11 hex
     (`8F9199E139C`) và 12 hex (`08F9199E139C`) không bị coi là 2 gateway khác nhau.
+
+    Zero-pad MỌI UID ngắn hơn 12 hex (trong khoảng độ dài hợp lệ), không chỉ
+    11/12. Vì sao: MAC đầy đủ là 12 hex, còn firmware chỉ bỏ đi các nibble 0 ở
+    ĐẦU khi in `String(mac, HEX)` — nibble 0 đầu có thể mất 1, 2, 3… ký tự tuỳ
+    giá trị MAC. Danh mục nhà máy (`docs/Danh sach 55 gateway.csv`) có 1 dòng 9
+    hex và 1 dòng 10 hex; nếu chỉ pad độ dài 11/12 thì những UID đó **không bao
+    giờ** khớp bản tin MQTT thật (firmware publish luôn 12 hex). Đã đối chiếu với
+    tên gateway trong `meta.json` của các phiên cũ: pad các độ dài 6-11 tái tạo
+    đúng UID thật 39/39 dòng.
+
+    **Ngưỡng dưới 6 hex**: chuỗi ngắn hơn 6 hex không thể là gateway UID
+    (`GATEWAY_UID_RE` đòi 6-16), nên giữ nguyên thay vì pad. Quan trọng vì hàm
+    này còn được gọi với những chuỗi không phải UID thật (giá trị thử, tên rút
+    gọn); pad bừa chúng sẽ đổi khoá tra cứu ở `focused_node`/`correlation` và làm
+    lệch kết quả đối chiếu.
+
+    UID dài hơn 12 giữ nguyên (không phải MAC — vd UID node/log 16-24 hex; cắt
+    bớt sẽ làm 2 node khác nhau trùng nhau).
     """
     u = normalize_hex_uid(uid)
     if not u:
         return ""
-    if len(u) in GATEWAY_UID_LENGTHS:
+    if GATEWAY_UID_MIN <= len(u) <= 12:
         return u.rjust(12, "0")
     return u
 
