@@ -1586,6 +1586,289 @@ def main() -> int:
             check(False, "kiểm tra chấm lại kết quả từ CSV thô",
                   "%s: %s" % (type(exc).__name__, exc))
 
+    # --- 10f. CHỐT LẠI BÁO CÁO cho phiên bị TẮT ĐỘT NGỘT -------------------
+    # Yêu cầu: "tạo thêm nút chốt lại báo cáo cho tool nếu bị tắt đột ngột".
+    # Phiên bị mất điện / kill tiến trình còn `status = RUNNING`, thiếu `ended_at`
+    # và `reports/` rỗng; nút "🧾 Chốt lại báo cáo" phải dựng lại CẢ BỘ báo cáo
+    # từ CSV thô rồi đánh dấu phiên đã chốt. Chốt chống tái phát:
+    #   (a) hỏi xác nhận trước khi ghi; bấm "Không" → không ghi, không chạy;
+    #   (b) chạy xong: có bộ báo cáo, `meta.json` đổi sang "đã chốt lại";
+    #   (c) mqtt/ và ping/ KHÔNG bị sửa một byte nào;
+    #   (d) KHÔNG chốt được phiên mà tool ĐANG chạy thật;
+    #   (e) nút TẮT với phiên đã chốt báo cáo đầy đủ (không có gì để chốt lại).
+    print("\n[10f] Chốt lại báo cáo cho phiên bị tắt đột ngột")
+    if main_window is not None:
+        try:
+            import csv as csv_module
+            import json as json_module
+
+            from PyQt5.QtCore import Qt as QtCore
+
+            from storage.schema import (
+                MQTT_DATA_COLUMNS,
+                PING_LOG_COLUMNS,
+            )
+
+            history = main_window.history_tab
+            runs_root = tmp_root / "history" / "runs"
+            run_id = "20260101_120000_AAAABBBBCCCC"
+            run_dir = runs_root / run_id
+            meta_path = run_dir / "meta.json"
+
+            # `_reload` / `_Box` của §10e được định nghĩa trong CÙNG hàm
+            # `main()` nên dùng lại được, nhưng nếu §10e lỗi sớm thì chúng chưa
+            # tồn tại — định nghĩa lại ở đây để phần này luôn chạy được.
+            from PyQt5.QtWidgets import QMessageBox as _QMB2
+
+            class _Box:
+                Yes = _QMB2.Yes
+                No = _QMB2.No
+                calls = []
+                answer = None
+
+                @staticmethod
+                def warning(*args, **_kwargs):
+                    _Box.calls.append(("warning", args[2] if len(args) > 2 else ""))
+
+                @staticmethod
+                def information(*args, **_kwargs):
+                    _Box.calls.append(
+                        ("information", args[2] if len(args) > 2 else ""))
+
+                @staticmethod
+                def question(*args, **_kwargs):
+                    _Box.calls.append(("question", args[2] if len(args) > 2 else ""))
+                    return _Box.answer
+
+            def _reload2():
+                worker = history._list_worker
+                if worker is not None:
+                    worker.wait(120000)
+                history.refresh()
+                worker = history._list_worker
+                if worker is not None:
+                    worker.wait(60000)
+                app.processEvents()
+
+            # Dựng lại đúng tình huống "tắt đột ngột": `RUNNING`, KHÔNG có mốc
+            # kết thúc, và `reports/` bị xoá sạch.
+            for path in sorted((run_dir / "reports").glob("*")):
+                path.unlink()
+            meta = json_module.loads(meta_path.read_text(encoding="utf-8"))
+            meta["ended_at"] = ""
+            meta["status"] = "RUNNING"
+            meta["duration_seconds"] = None
+            meta["scoring_params"] = {}
+            meta_path.write_text(json_module.dumps(meta, ensure_ascii=False),
+                                 encoding="utf-8")
+
+            # Đủ nguồn thô để dựng lại MỌI báo cáo dựng được, kể cả node trọng
+            # tâm: `mqtt_data` ghi rõ TỪNG bản copy (gateways = 1 gateway/bản tin)
+            # để `focused_node_missing.csv` có ca bắt hụt thật, không phải bảng rỗng.
+            mqtt_path = run_dir / "mqtt" / "mqtt_data_20260101.csv"
+            with open(mqtt_path, "w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv_module.DictWriter(
+                    handle, fieldnames=list(MQTT_DATA_COLUMNS),
+                    extrasaction="ignore", restval="")
+                writer.writeheader()
+                for seq in range(1, 21):
+                    stamp = "2026-01-01T12:00:%02d+07:00" % (seq % 60)
+                    # Cả hai gateway cùng nghe mọi bản tin, TRỪ seq 5 và 6 của
+                    # DDDDEEEEFFFF → gateway đó bắt hụt đúng 2 gói.
+                    for gateway in ("AAAABBBBCCCC", "DDDDEEEEFFFF"):
+                        if gateway == "DDDDEEEEFFFF" and seq in (5, 6):
+                            continue
+                        row = {col: "" for col in MQTT_DATA_COLUMNS}
+                        row.update({
+                            "received_at": stamp,
+                            "packet_type": "DATA",
+                            "node_uid": "0011223344556677",
+                            "node_format": "NEW_NODE_MSG",
+                            "seq": str(seq),
+                            "gateways": gateway,
+                            "gateways_heard": "1",
+                            "gateway_uid": gateway,
+                            "gateway_name": "GW %s" % gateway,
+                            "gateway_timestamp": stamp,
+                            "valid": "1",
+                        })
+                        writer.writerow(row)
+
+            ping_path = run_dir / "ping" / "ping_log_20260101.csv"
+            with open(ping_path, "w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv_module.DictWriter(
+                    handle, fieldnames=list(PING_LOG_COLUMNS),
+                    extrasaction="ignore", restval="")
+                writer.writeheader()
+                for gateway in ("AAAABBBBCCCC", "DDDDEEEEFFFF"):
+                    for index in range(30):
+                        row = {col: "" for col in PING_LOG_COLUMNS}
+                        row.update({
+                            "timestamp": "2026-01-01T12:00:%02d+07:00" % index,
+                            "gateway_uid": gateway,
+                            "gateway_name": "GW %s" % gateway,
+                            "ip_address": "10.0.0.1",
+                            "ping_success": "1",
+                            "latency_ms": "1.5",
+                            "timeout": "0",
+                        })
+                        writer.writerow(row)
+
+            raw_files = (sorted((run_dir / "mqtt").glob("*.csv"))
+                         + sorted((run_dir / "ping").glob("*.csv")))
+            raw_before = {path: path.read_bytes() for path in raw_files}
+
+            # Node trọng tâm của phiên được chốt trong config của tool — phiên bị
+            # tắt ngang không kịp ghi lại node nào, nên đây cũng là thứ phải dựng
+            # lại từ chính dòng dữ liệu thô.
+            main_window.config.focused_node_uid = "0011223344556677"
+            main_window.config.focused_node_enabled = True
+
+            history.active_run_id = ""
+            _reload2()
+            history.table.setCurrentIndex(history.model.index(0, 0))
+            history._on_clicked(history.model.index(0, 0))
+            app.processEvents()
+            worker = history._report_worker
+            if worker is not None:
+                worker.wait(30000)
+            app.processEvents()
+
+            cols = list(history.model.columns)
+            status_shown = str(history.model.data(
+                history.model.index(0, cols.index("status_label")),
+                QtCore.DisplayRole))
+            check("tắt ngang" in status_shown.lower(),
+                  "chốt lại: phiên RUNNING còn sót (chưa chốt) hiện là 'tắt ngang'",
+                  "nhận %r" % status_shown)
+            check(history.btn_refinalize.isEnabled(),
+                  "chốt lại: nút BẬT cho phiên bị tắt ngang còn thiếu báo cáo",
+                  "nhận enabled=%s" % history.btn_refinalize.isEnabled())
+
+            def _wait_refinalize():
+                worker = history._refinalize_worker
+                if worker is not None:
+                    worker.wait(180000)
+                app.processEvents()
+                # `_reload_after_refinalize` quét lại danh sách ở luồng nền.
+                worker = history._list_worker
+                if worker is not None:
+                    worker.wait(60000)
+                app.processEvents()
+
+            # (a) bấm "Không" → không ghi file nào, không chạy luồng nền.
+            _Box.calls = []
+            with mock.patch("ui.history_tab.QMessageBox", _Box):
+                _Box.answer = _QMB2.No
+                history._refinalize_current()
+            app.processEvents()
+            check([c[0] for c in _Box.calls] == ["question"],
+                  "chốt lại: luôn HỎI xác nhận trước khi ghi vào lịch sử",
+                  "nhận %r" % [c[0] for c in _Box.calls])
+            check(not (run_dir / "reports" / "run_summary.csv").exists(),
+                  "chốt lại: bấm 'Không' → KHÔNG ghi báo cáo nào")
+            check(history._refinalize_worker is None,
+                  "chốt lại: bấm 'Không' → không chạy luồng nền")
+
+            # (b) bấm "Có" → chốt lại thật.
+            _Box.calls = []
+            with mock.patch("ui.history_tab.QMessageBox", _Box):
+                _Box.answer = _QMB2.Yes
+                history._refinalize_current()
+                app.processEvents()
+                check(not history.btn_refinalize.isEnabled(),
+                      "chốt lại: nút bị khoá trong lúc đang chốt")
+                _wait_refinalize()
+
+            written_names = {path.name for path in (run_dir / "reports").glob("*.csv")}
+            check({
+                "node_summary.csv",
+                "ping_summary.csv",
+                "correlation_summary.csv",
+                "mqtt_silence.csv",
+                "gateway_result.csv",
+                "run_summary.csv",
+            } <= written_names,
+                  "chốt lại: dựng lại đủ bộ báo cáo cốt lõi",
+                  "có %r" % sorted(written_names))
+            check("focused_node_summary.csv" in written_names,
+                  "chốt lại: dựng lại được cả bảng node trọng tâm",
+                  "có %r" % sorted(written_names))
+            check({path: path.read_bytes() for path in raw_files} == raw_before,
+                  "chốt lại: mqtt/ và ping/ KHÔNG bị sửa một byte nào")
+
+            with open(run_dir / "reports" / "gateway_result.csv",
+                      "r", encoding="utf-8-sig", newline="") as handle:
+                result_rows = list(csv_module.reader(handle))
+            check(len(result_rows) >= 2 and result_rows[-1][0] == "TỔNG",
+                  "chốt lại: dòng TỔNG nằm CUỐI file kết quả",
+                  "dòng cuối: %r" % (result_rows[-1][:1] if result_rows else None))
+
+            with open(run_dir / "reports" / "run_summary.csv",
+                      "r", encoding="utf-8-sig", newline="") as handle:
+                summary_row = next(csv_module.DictReader(handle))
+            check(summary_row.get("parse_errors", "x") == ""
+                  and summary_row.get("reconnects", "x") == "",
+                  "chốt lại: bộ đếm không dựng lại được để TRỐNG, không bịa số 0",
+                  "nhận parse_errors=%r" % summary_row.get("parse_errors"))
+
+            meta_after = json_module.loads(meta_path.read_text(encoding="utf-8"))
+            check(meta_after.get("status") == "REFINALIZED",
+                  "chốt lại: meta.json đánh dấu phiên đã chốt lại",
+                  "nhận status=%r" % meta_after.get("status"))
+            check(bool(meta_after.get("ended_at")),
+                  "chốt lại: meta.json được ghi mốc kết thúc suy từ dữ liệu thô",
+                  "nhận ended_at=%r" % meta_after.get("ended_at"))
+
+            status_text = str(history.model.data(
+                history.model.index(0, cols.index("status_label")),
+                QtCore.DisplayRole))
+            check("chốt lại" in status_text.lower(),
+                  "chốt lại: cột 'Trạng thái' đổi sang 'Đã chốt lại từ dữ liệu thô'",
+                  "nhận %r" % status_text)
+            check(not history.btn_refinalize.isEnabled(),
+                  "chốt lại: nút TẮT sau khi phiên đã có đủ báo cáo")
+            check(history.btn_rescore.isEnabled(),
+                  "chốt lại: nút 'Chấm lại kết quả' vẫn dùng được như thường")
+
+            # (d) phiên mà tool THẬT SỰ đang chạy → không được chốt lại.
+            meta_active = dict(meta_after)
+            meta_active["status"] = "RUNNING"
+            meta_active["ended_at"] = ""
+            meta_path.write_text(json_module.dumps(meta_active, ensure_ascii=False),
+                                 encoding="utf-8")
+            history.active_run_id = run_id
+            _reload2()
+            history.table.setCurrentIndex(history.model.index(0, 0))
+            history._on_clicked(history.model.index(0, 0))
+            app.processEvents()
+            check(not history.btn_refinalize.isEnabled(),
+                  "chốt lại: nút TẮT cho phiên tool đang chạy thật")
+            _Box.calls = []
+            with mock.patch("ui.history_tab.QMessageBox", _Box):
+                history._refinalize_current()
+            app.processEvents()
+            check([c[0] for c in _Box.calls] == ["warning"],
+                  "chốt lại: bấm nút khi phiên đang chạy → cảnh báo, không ghi",
+                  "nhận %r" % (_Box.calls,))
+            check(history._refinalize_worker is None,
+                  "chốt lại: phiên đang chạy → KHÔNG chạy luồng nền")
+
+            # Trả phiên về trạng thái đã chốt lại để bước 10d không thấy phiên
+            # "tắt ngang" thừa.
+            meta_after["status"] = "REFINALIZED"
+            meta_after["ended_at"] = "2026-01-01T12:59:00+07:00"
+            meta_path.write_text(json_module.dumps(meta_after, ensure_ascii=False),
+                                 encoding="utf-8")
+            history.active_run_id = ""
+            main_window.config.focused_node_uid = ""
+            main_window.config.focused_node_enabled = False
+        except Exception as exc:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            check(False, "kiểm tra chốt lại báo cáo từ CSV thô",
+                  "%s: %s" % (type(exc).__name__, exc))
+
     # --- 10d. TÌM PHIÊN THEO GATEWAY (UID hoặc tên) ------------------------
     # Yêu cầu: "trong mục lịch sử phiên, thêm 1 thanh tìm kiếm, tìm theo UID
     # gateway hoặc tên gateway sẽ ra phiên có gateway đó". Phải tra trên ẢNH CHỤP

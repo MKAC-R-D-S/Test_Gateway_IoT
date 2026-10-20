@@ -484,11 +484,16 @@ def test_scoring_params_snapshot_falls_back_to_defaults():
 
     assert snapshot["min_coverage_percent"] == 80.0
     assert snapshot["ping_down_threshold"] == 2
+    # `focused_node_*` cũng nằm trong ảnh chụp: node trọng tâm của phiên phải
+    # chốt lại được, nếu không thì nút "Chốt lại báo cáo" sẽ dựng bảng bắt hụt /
+    # bắn hụt theo node HIỆN TẠI trong config.json (có thể đã đổi).
+    assert snapshot["focused_node_uid"] == ""
     assert set(snapshot) == {
         "min_coverage_percent", "min_ping_ok_percent",
         "max_late_percent", "min_packets_for_rate",
         "ping_down_threshold", "correlation_window_seconds",
         "silent_window_threshold",
+        "focused_node_uid", "focused_node_late_seconds",
     }
 
 
@@ -509,6 +514,16 @@ def test_scoring_params_ignores_blank_values():
 
     assert not hasattr(params, "criteria_min_coverage_percent")
     assert not hasattr(params, "ping_down_threshold")
+
+
+def test_scoring_params_carries_focused_node_snapshot():
+    params = ScoringParams({
+        "focused_node_uid": "0011223344556677",
+        "focused_node_late_seconds": 45,
+    })
+
+    assert params.focused_node_uid == "0011223344556677"
+    assert params.focused_node_late_seconds == 45.0
 
 
 def test_ping_down_threshold_changes_reference_downtime_columns(tmp_path):

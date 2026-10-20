@@ -56,6 +56,8 @@ from analytics.gateway_rescore import (
     rescore_run,
     run_data_sources,
 )
+from analytics.gateway_result import ScoringParams, scoring_params_snapshot
+from analytics.refinalize import RefinalizeError, refinalize_run, raw_sources
 from core.gateway_directory import load_gateway_catalog, lookup_gateway_names
 from core.uid import gateway_name_index, gateway_uid_variants
 from storage.reader import iter_csv_rows
@@ -75,9 +77,11 @@ from storage.session import (
     SESSION_LABEL_MAX,
     collect_run_history,
     delete_run_dir,
+    describe_status,
     fill_session_gateway_names,
     human_size,
     normalize_session_label,
+    refinalize_session,
     report_files,
     set_session_label,
 )
@@ -574,6 +578,105 @@ class RescoreWorker(QThread):
             self.failed.emit("%s: %s" % (type(exc).__name__, exc))
 
 
+class RefinalizeWorker(QThread):
+    """CHỐT LẠI báo cáo cho phiên bị TẮT ĐỘT NGỘT, dựng lại từ CSV thô.
+
+    Khác `RescoreWorker` (chỉ ghi `gateway_result.csv`): worker này ghi LẠI cả bộ
+    báo cáo như lúc phiên dừng sạch, rồi cập nhật `meta.json` để phiên không còn
+    bị nhận là "tắt ngang". Phiên 3-4 ngày có `mqtt_data_*.csv` hàng trăm MB nên
+    chạy trong thread riêng, và phát `progress` để nhãn trạng thái không đứng im.
+    """
+
+    progress = pyqtSignal(str)
+    done = pyqtSignal(object)       # RefinalizeResult
+    failed = pyqtSignal(str)
+
+    def __init__(
+        self,
+        run_id: str,
+        run_dir: Path,
+        *,
+        devices: Sequence[Any] = (),
+        config: Any = None,
+        session_params: Optional[Dict[str, Any]] = None,
+        focus_node: str = "",
+        late_seconds: float = 30.0,
+        paused_seconds: float = 0.0,
+        pause_started_at: str = "",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.run_id = run_id
+        self.run_dir = Path(run_dir)
+        self.devices = list(devices or [])
+        self.config = config
+        self.session_params = dict(session_params or {})
+        #: Node trọng tâm của PHIÊN (meta.json), KHÔNG phải của config hiện tại:
+        #: phiên cũ phải dựng lại đúng thứ nó đã theo dõi.
+        self.focus_node = focus_node
+        self.late_seconds = float(late_seconds)
+        self.paused_seconds = float(paused_seconds)
+        self.pause_started_at = pause_started_at
+
+    def run(self) -> None:
+        try:
+            result = self._run()
+            self.done.emit(result)
+        except RefinalizeError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:  # noqa: BLE001 - báo ra GUI thay vì crash
+            self.failed.emit("%s: %s" % (type(exc).__name__, exc))
+
+    def _run(self):
+        import time
+
+        from storage.csv_writer import LogManager
+
+        # LogManager chỉ mkdir + tạo đối tượng CsvSink (không start thread) nên
+        # dùng được ở đây để có ĐÚNG định dạng file như mọi báo cáo khác.
+        manager = LogManager(self.run_dir)
+        original = manager.write_single_csv
+        allow_overwrite = {"alerts_summary.csv", "gateway_downtime.csv"}
+
+        def guarded(filename, columns, rows):
+            # Bảo vệ file KHÔNG dựng lại đầy đủ được: worker này đã kiểm tra tồn
+            # tại trước khi gọi, nhưng chặn thêm một lớp nữa để không bao giờ ghi
+            # đè bản đầy đủ của phiên bằng bản suy ra được từ CSV.
+            if filename in allow_overwrite and (self.run_dir / "reports" / filename).exists():
+                return self.run_dir / "reports" / filename
+            return original(filename, columns, rows)
+
+        params = ScoringParams(self.session_params)
+        # `refinalize_run` ưu tiên `params.focused_node_late_seconds` (ảnh chụp
+        # của phiên). Phiên chạy bằng bản tool CHƯA chốt khoá này trong
+        # `scoring_params` thì lấy ngưỡng mà GUI đã tính (cũng từ ảnh chụp, thiếu
+        # nữa thì từ `config.json`) — nếu không, ngưỡng sẽ rơi về mặc định của
+        # code và số "bắn hụt" có thể khác lần chốt gốc.
+        setattr(params, "focused_node_late_seconds", self.late_seconds)
+        now_stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+        result = refinalize_run(
+            self.run_dir,
+            write_single_csv=guarded,
+            devices=self.devices,
+            focus_node=self.focus_node,
+            late_seconds=self.late_seconds,
+            params=params,
+            paused_seconds=self.paused_seconds,
+            pause_started_at=self.pause_started_at,
+            now_stamp=now_stamp,
+            progress=self.progress.emit,
+        )
+        # meta.json chỉ được ghi SAU khi báo cáo đã nằm trên đĩa: nếu bước này
+        # lỗi, phiên vẫn mang nhãn "tắt ngang" — đúng sự thật, không nói dối.
+        refinalize_session(
+            self.run_dir,
+            ended_at=result.ended_at,
+            duration_seconds=result.duration_seconds,
+        )
+        return result
+
+
 class HistoryTab(QWidget):
     """Bảng danh sách phiên + vùng xem kết quả của phiên được chọn."""
 
@@ -598,6 +701,7 @@ class HistoryTab(QWidget):
         self._list_worker: Optional[HistoryWorker] = None
         self._report_worker: Optional[ReportWorker] = None
         self._rescore_worker: Optional[RescoreWorker] = None
+        self._refinalize_worker: Optional[RefinalizeWorker] = None
         self._pending: Optional[Dict[str, Any]] = None
         self._models: Dict[str, DictTableModel] = {}
         self._notes: Dict[str, QLabel] = {}
@@ -749,6 +853,21 @@ class HistoryTab(QWidget):
         self.btn_open_dir.clicked.connect(self._open_run_dir)
         self.btn_open_reports = QPushButton("📊  Mở thư mục báo cáo")
         self.btn_open_reports.clicked.connect(self._open_report_dir)
+        self.btn_refinalize = QPushButton("🧾  Chốt lại báo cáo (phiên bị tắt đột ngột)")
+        self.btn_refinalize.setToolTip(
+            "Dựng lại TOÀN BỘ báo cáo của phiên đang chọn từ DỮ LIỆU THÔ\n"
+            "(mqtt_data_*.csv, ping_log_*.csv, mqtt_gateway_log_*.csv) rồi\n"
+            "đánh dấu phiên đã chốt lại.\n\n"
+            "Dùng khi tool/PC bị tắt đột ngột (mất điện, kill tiến trình) nên\n"
+            "phiên không kịp ghi reports/. Tool sẽ ghi lại: node_summary,\n"
+            "ping_summary, correlation_summary, mqtt_silence, gateway_result,\n"
+            "focused_node_* (nếu có theo dõi node) và run_summary.\n\n"
+            "Dữ liệu thô trong mqtt/ và ping/ KHÔNG bị sửa hay xoá.\n"
+            "Chạy bằng đúng ngưỡng đã chốt trong meta.json của phiên.\n"
+            "Một số báo cáo (cảnh báo im lặng, gateway_downtime) KHÔNG dựng\n"
+            "lại được — nếu phiên đã có thì tool GIỮ NGUYÊN bản cũ."
+        )
+        self.btn_refinalize.clicked.connect(self._refinalize_current)
         self.btn_rescore = QPushButton("⚖  Chấm lại kết quả")
         self.btn_rescore.setToolTip(
             "Dựng lại ĐẠT / KHÔNG ĐẠT của phiên đang chọn từ DỮ LIỆU THÔ\n"
@@ -767,6 +886,7 @@ class HistoryTab(QWidget):
         self.btn_delete.clicked.connect(self._delete_current)
         actions.addWidget(self.btn_rename)
         actions.addWidget(self.btn_fill_names)
+        actions.addWidget(self.btn_refinalize)
         actions.addWidget(self.btn_rescore)
         actions.addWidget(self.btn_open_reports)
         actions.addWidget(self.btn_open_dir)
@@ -1171,6 +1291,10 @@ class HistoryTab(QWidget):
         running_rescore = (
             self._rescore_worker is not None and self._rescore_worker.isRunning()
         )
+        running_refinalize = (
+            self._refinalize_worker is not None
+            and self._refinalize_worker.isRunning()
+        )
         # Phiên ĐANG CHẠY THẬT không được chấm lại: rescorer ghi đè file trong
         # reports/ của chính phiên đó, chạy song song với lúc ghi báo cáo là hỏng
         # dữ liệu. Phiên bị TẮT NGANG cũng còn `status = RUNNING` trong meta.json
@@ -1178,11 +1302,19 @@ class HistoryTab(QWidget):
         can_rescore = bool(
             has and not self._is_active_status(row) and not running_rescore
         )
+        # Chốt lại báo cáo chỉ dành cho phiên CẦN chốt: bị tắt ngang hoặc còn
+        # thiếu báo cáo. Phiên đã bị tắt ngang vẫn có `status = RUNNING` trong
+        # meta.json nên phải loại trừ phiên ĐANG CHẠY THẬT bằng `active_run_id`.
+        can_refinalize = bool(
+            has and not self._is_active_status(row) and not running_refinalize
+            and (not row.get("finalized") or not row.get("reports"))
+        )
         self.btn_rename.setEnabled(has)
         self.btn_fill_names.setEnabled(has)
         self.btn_open_dir.setEnabled(has)
         self.btn_open_reports.setEnabled(bool(has and row.get("reports")))
         self.btn_rescore.setEnabled(can_rescore)
+        self.btn_refinalize.setEnabled(can_refinalize)
         self.btn_search.setEnabled(has)
         self.btn_delete.setEnabled(has)
 
@@ -1256,6 +1388,190 @@ class HistoryTab(QWidget):
         if str(row.get("run_id") or "") != self.active_run_id:
             return False
         return str(row.get("status") or "").strip().upper() == "RUNNING"
+
+    # -------------------------------------------------- chốt lại báo cáo
+    def _refinalize_current(self) -> None:
+        """CHỐT LẠI báo cáo cho phiên bị tắt đột ngột, dựng lại từ CSV thô.
+
+        Khác "Chấm lại kết quả" (chỉ ghi `gateway_result.csv`): thao tác này ghi
+        LẠI cả bộ báo cáo như lúc phiên dừng sạch rồi cập nhật `meta.json`.
+        Chạy trong `QThread` vì phải đọc lại `mqtt_data_*.csv` (phiên 4 ngày có
+        thể ~900k dòng), và hỏi xác nhận trước khi ghi.
+        """
+        row = self._selected_row()
+        if row is None:
+            return
+        run_id = str(row.get("run_id") or "")
+        run_dir = Path(str(row.get("run_dir") or ""))
+        if self._refinalize_worker is not None and self._refinalize_worker.isRunning():
+            self.lbl_status.setText("Đang chốt lại một phiên khác, vui lòng đợi…")
+            return
+        if self._is_active_status(row):
+            QMessageBox.warning(
+                self, "Không thể chốt lại",
+                "Phiên %s đang CHẠY — dừng phiên trước khi chốt lại.\n"
+                "(Chốt lại ghi vào reports/ của chính phiên đó nên không được\n"
+                " chạy song song với lúc pipeline đang ghi dữ liệu.)" % run_id,
+            )
+            return
+        sources = raw_sources(run_dir)
+        if not sources["mqtt_files"]:
+            QMessageBox.warning(
+                self, "Không chốt lại được",
+                "Phiên %s không có mqtt/mqtt_data_*.csv nên không có dữ liệu thô\n"
+                "để dựng lại báo cáo." % run_id,
+            )
+            return
+
+        # Ngưỡng chấm: ưu tiên ẢNH CHỤP trong meta.json của phiên (phiên của bản
+        # tool cũ không có khoá này → dùng config.json hiện tại). Cùng cách xử lý
+        # với nút "Chấm lại kết quả".
+        session_params = self._session_params(row)
+        # Node trọng tâm của PHIÊN (ảnh chụp trong meta.json), không phải node
+        # đang theo dõi hôm nay: phiên cũ phải dựng lại đúng thứ nó đã theo dõi.
+        # Phiên của bản tool cũ không có khoá này → `_session_params` đã điền
+        # sẵn node hiện tại của `config.json`.
+        focus_node = str(session_params.get("focused_node_uid") or "")
+        late_seconds = float(
+            session_params.get("focused_node_late_seconds")
+            or getattr(self.config, "focused_node_late_seconds", 30.0)
+        )
+        source_size = sum(_safe_size(path) for path in sources["mqtt_files"])
+        notes = [
+            "CHỐT LẠI TOÀN BỘ báo cáo cho phiên %s?" % run_id,
+            "",
+            "Phiên này không kịp ghi báo cáo (bị tắt đột ngột). Tool sẽ đọc lại",
+            "dữ liệu thô rồi ghi vào reports/:",
+            "  • node_summary.csv, ping_summary.csv",
+            "  • correlation_summary.csv, mqtt_silence.csv",
+            "  • gateway_result.csv, run_summary.csv",
+            "  • focused_node_*.csv (nếu phiên có theo dõi node trọng tâm)",
+            "và cập nhật meta.json (đánh dấu phiên đã chốt lại).",
+            "",
+            "Dữ liệu thô trong mqtt/ và ping/ KHÔNG bị sửa hay xoá.",
+        ]
+        if not row.get("scoring_params"):
+            notes.append(
+                "\n⚠ Phiên chạy bằng bản tool cũ nên meta.json không có ngưỡng đã\n"
+                "  chốt → dùng ngưỡng từ config.json hiện tại."
+            )
+        if focus_node:
+            notes.append("\nNode trọng tâm của phiên: %s" % focus_node)
+        else:
+            notes.append(
+                "\nℹ Phiên không theo dõi node trọng tâm → không có báo cáo bắt hụt/"
+                "bắn hụt."
+            )
+        if source_size > 5 * 1024 * 1024:
+            notes.append(
+                "\nPhiên có %s dữ liệu MQTT thô — có thể mất vài chục giây."
+                % human_size(source_size)
+            )
+        notes.append("\nTiếp tục chốt lại?")
+        answer = QMessageBox.question(
+            self, "Chốt lại báo cáo",
+            "\n".join(notes),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        self.lbl_status.setText("Đang chốt lại báo cáo cho phiên %s…" % run_id)
+        self.btn_refinalize.setEnabled(False)
+        self._refinalize_worker = RefinalizeWorker(
+            run_id,
+            run_dir,
+            devices=list(self.devices or ()),
+            config=self.config,
+            session_params=session_params,
+            focus_node=focus_node,
+            late_seconds=late_seconds,
+            paused_seconds=float(row.get("paused_seconds") or 0.0),
+            pause_started_at=str(row.get("pause_started_at") or ""),
+            parent=self,
+        )
+        self._refinalize_worker.progress.connect(self._on_refinalize_progress)
+        self._refinalize_worker.done.connect(self._on_refinalize_done)
+        self._refinalize_worker.failed.connect(self._on_refinalize_failed)
+        self._refinalize_worker.start()
+
+    def _on_refinalize_progress(self, message: str) -> None:
+        self.lbl_status.setText(str(message))
+
+    def _on_refinalize_done(self, result: object) -> None:
+        self._refinalize_worker = None
+        run_id = str(getattr(result, "run_id", "") or "")
+        parts: List[str] = []
+        summary = getattr(result, "summary_text", None)
+        if callable(summary):
+            parts.append(str(summary()))
+        warnings = list(getattr(result, "warnings", []) or [])
+        if warnings:
+            parts.append("⚠ " + " | ".join(warnings))
+        kept = sorted(str(name) for name in (getattr(result, "kept_existing", []) or []))
+        if kept:
+            parts.append("Giữ nguyên bản cũ: %s" % ", ".join(kept))
+        written = list(getattr(result, "written", []) or [])
+        if written:
+            parts.append("Đã ghi: %s" % ", ".join(Path(str(p)).name for p in written))
+        text = " ".join(part for part in parts if part)
+        self.lbl_status.setText(text)
+        QMessageBox.information(self, "Đã chốt lại báo cáo", text or "Xong.")
+        # Lượt nạp lại `reports/` ngay sau đây sẽ GHI ĐÈ nhãn trạng thái bằng
+        # thông báo "Đã nạp kết quả phiên…", nên câu kết luận được chuyển sang để
+        # nối vào cuối — cùng cách nút "Chấm lại kết quả" đang làm. Chỉ làm khi
+        # người dùng vẫn đang xem đúng phiên vừa chốt, nếu không câu này sẽ dính
+        # nhầm vào thông báo của phiên khác.
+        row = self._current
+        if row is not None and str(row.get("run_id") or "") == run_id:
+            self._rescore_note = text
+        self._update_buttons()
+        self._reload_after_refinalize(run_id)
+
+    def _on_refinalize_failed(self, message: str) -> None:
+        self._refinalize_worker = None
+        self.lbl_status.setText("Chốt lại báo cáo thất bại: %s" % message)
+        QMessageBox.warning(self, "Không chốt lại được", str(message))
+        self._update_buttons()
+
+    def _reload_after_refinalize(self, run_id: str) -> None:
+        """Nạp lại báo cáo vừa chốt + quét lại danh sách cho khớp đĩa.
+
+        Quét lại là cần thiết chứ không chỉ để làm mới: cột "Số báo cáo", "Trạng
+        thái" và cả trang "Tổng kết" đều lấy từ đĩa, mà lượt quét trước diễn ra
+        khi phiên còn thiếu báo cáo. Dòng của phiên được CHỌN LẠI sau khi quét
+        xong (`select_again`) để người dùng thấy ngay kết quả vừa chốt.
+        """
+        # 1) Nạp lại `reports/` ngay: người dùng đang nhìn đúng phiên này nên
+        # không cần chờ lượt quét toàn bộ `data/runs/`.
+        row = self._current
+        if row is not None and str(row.get("run_id") or "") == run_id:
+            self._pending = row
+            self._start_pending_load()
+
+        # 2) Quét lại danh sách trong nền. KHÔNG tắt nút "Làm mới" ở đây: nút đó
+        # đã tắt trong lúc quét, và tắt ở ngoài luồng quét sẽ làm nó kẹt tắt
+        # (tín hiệu `finished` chỉ bật lại đúng lượt quét tại thời điểm nối).
+        def select_again(_rows: object) -> None:
+            for index, row_ in enumerate(self._rows):
+                if str(row_.get("run_id") or "") == run_id:
+                    index_ = self.model.index(index, 0)
+                    self.table.setCurrentIndex(index_)
+                    self._on_clicked(index_)
+                    return
+
+        self._list_worker = HistoryWorker(
+            self.data_dir, self.active_run_id, self.devices, self
+        )
+        self._list_worker.loaded.connect(self._on_runs_loaded)
+        self._list_worker.loaded.connect(select_again)
+        self._list_worker.failed.connect(self._on_failed)
+        self._list_worker.finished.connect(
+            lambda: self.btn_refresh.setEnabled(True)
+        )
+        self.lbl_count.setText("Đang quét lại data/runs/…")
+        self._list_worker.start()
 
     def _rescore_current(self) -> None:
         """Chấm lại ĐẠT/KHÔNG ĐẠT cho phiên đang chọn, dựng lại từ CSV thô.
@@ -1337,9 +1653,19 @@ class HistoryTab(QWidget):
         self._rescore_worker.start()
 
     def _session_params(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        """Ảnh chụp tham số chấm của phiên (rỗng với phiên của bản tool cũ)."""
+        """Ảnh chụp tham số chấm của phiên để CHẤM LẠI/CHỐT LẠI đúng ngưỡng cũ.
+
+        Phiên của bản tool cũ không có khoá `scoring_params` trong `meta.json`
+        nên phải rơi về `config.json` HIỆN TẠI — chấp nhận sai lệch, nhưng dùng
+        ngưỡng hiện tại vẫn hơn là dựng báo cáo bằng tham số mặc định của code.
+        """
         params = row.get("scoring_params")
-        return dict(params) if isinstance(params, dict) else {}
+        if isinstance(params, dict) and params:
+            return dict(params)
+        try:
+            return dict(scoring_params_snapshot(self.config))
+        except Exception:  # noqa: BLE001 - thiếu config thì để refinalize dùng mặc định
+            return {}
 
     def _on_rescore_progress(self, message: str) -> None:
         self.lbl_status.setText(str(message))

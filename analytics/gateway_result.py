@@ -147,6 +147,18 @@ ANALYSIS_KEYS: Tuple[str, ...] = (
     "silent_window_threshold",
 )
 
+#: Tham số mô tả CÁCH ĐO của phiên, không phải ngưỡng chấm điểm — chốt cùng chỗ
+#: vì cùng một lý do: báo cáo của phiên phải dựng lại được y như lần đầu.
+#:   - `focused_node_uid`: node trọng tâm của phiên. Không chốt thì khi CHỐT LẠI
+#:     một phiên bị tắt đột ngột, tool chỉ biết node trọng tâm HIỆN TẠI trong
+#:     `config.json` — có thể đã đổi sang node khác — nên bảng bắt hụt/bắn hụt
+#:     hoặc không được dựng lại, hoặc dựng cho nhầm node.
+#:   - `focused_node_late_seconds`: ngưỡng trễ để tính "bắn hụt" của node đó.
+FOCUS_KEYS: Tuple[str, ...] = (
+    "focused_node_uid",
+    "focused_node_late_seconds",
+)
+
 
 def _analysis_param(config: Any, name: str, default: int) -> int:
     """Đọc tham số phân tích từ `TestConfig` (tên KHÔNG có tiền tố `criteria_`)."""
@@ -177,6 +189,8 @@ def scoring_params_snapshot(config: Any) -> Dict[str, Any]:
         snapshot[name] = _analysis_param(
             config, name, int(DEFAULTS.get(name, 5))
         )
+    for name in FOCUS_KEYS:
+        snapshot[name] = getattr(config, name, "")
     return snapshot
 
 
@@ -201,6 +215,11 @@ class ScoringParams:
             if raw in (None, ""):
                 continue
             setattr(self, name, int(float(raw)))
+        for name in FOCUS_KEYS:
+            raw = values.get(name)
+            if raw in (None, ""):
+                continue
+            setattr(self, name, float(raw) if name.endswith("_seconds") else str(raw))
 
 
 # ---------------------------------------------------------------------------

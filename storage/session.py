@@ -50,6 +50,11 @@ SESSION_LABEL_MAX = 120
 STATUS_RUNNING = "RUNNING"
 STATUS_STOPPED = "STOPPED"
 STATUS_CRASHED = "CRASHED"
+#: Phiên bị tắt đột ngột rồi người dùng CHỐT LẠI báo cáo từ dữ liệu thô (nút
+#: "🧾 Chốt lại báo cáo" ở tab Lịch sử phiên). KHÁC `STOPPED`: báo cáo được dựng
+#: lại từ CSV, không phải do phiên tự dừng sạch — thời lượng/mốc kết thúc chỉ là
+#: suy đoán từ dấu vết trên đĩa nên phải hiện rõ trên giao diện.
+STATUS_REFINALIZED = "REFINALIZED"
 
 
 @dataclass
@@ -377,6 +382,45 @@ def set_session_label(run_dir: Path, label: object) -> RunSession:
     return session
 
 
+#: Câu mốc ghi vào `stop_reason` khi chốt lại báo cáo cho phiên bị tắt đột ngột.
+REFINALIZE_REASON = "Chốt lại báo cáo từ dữ liệu thô (phiên bị tắt đột ngột)"
+
+
+def refinalize_session(
+    run_dir: Path,
+    *,
+    ended_at: str = "",
+    duration_seconds: Optional[float] = None,
+    reason: str = REFINALIZE_REASON,
+) -> RunSession:
+    """Chốt lại `meta.json` của phiên bị TẮT ĐỘT NGỘT sau khi dựng lại báo cáo.
+
+    Vì sao cần hàm riêng thay vì `finish()`: phiên bị tắt ngang (mất điện, kill
+    tiến trình) không có mốc kết thúc thật, nên mọi con số thời gian ở đây đều là
+    SUY RA TỪ DẤU VẾT TRÊN ĐĨA — không được trộn với `finish()` của phiên dừng
+    sạch. Cụ thể:
+      - `status = REFINALIZED` (không phải `STOPPED`) để tab Lịch sử hiện đúng
+        "Đã chốt lại từ dữ liệu thô" — người đọc biết báo cáo được dựng lại chứ
+        phiên không hề tự dừng sạch.
+      - `ended_at`/`duration_seconds` lấy từ mốc CUỐI CÙNG có bằng chứng trong
+        dữ liệu (`ended_at` do nơi gọi tính từ `mqtt/` + `ping/`).
+      - `pause_started_at` được đóng lại: nếu người dùng tạm dừng rồi PC tắt
+        ngang, khoảng tạm dừng đang mở sẽ bị tính nhầm vào thời lượng.
+    """
+    session = RunSession.load(Path(run_dir))
+    if session.pause_started_at:
+        session.mark_resumed()
+    if ended_at:
+        session.ended_at = str(ended_at)
+    if duration_seconds is not None:
+        session.duration_seconds = round(max(0.0, float(duration_seconds)), 3)
+    session.status = STATUS_REFINALIZED
+    if reason:
+        session.stop_reason = reason
+    session.save()
+    return session
+
+
 def session_gateway_names(run_dir: Path) -> Dict[str, str]:
     """Index {mọi cách viết gateway UID → tên} từ ẢNH CHỤP trong `meta.json`.
 
@@ -573,6 +617,7 @@ STATUS_LABELS = {
     STATUS_RUNNING: "Đang chạy",
     STATUS_STOPPED: "Đã dừng",
     STATUS_CRASHED: "Tắt ngang",
+    STATUS_REFINALIZED: "Đã chốt lại từ dữ liệu thô",
 }
 
 
@@ -587,9 +632,14 @@ def describe_status(session: "RunSession", active_run_id: str = "") -> str:
         return "Đang chạy"
     if session.status == STATUS_STOPPED:
         return "Đã dừng" if session.ended_at else "Đã dừng (thiếu mốc kết thúc)"
+    if session.status == STATUS_REFINALIZED:
+        # Phiên bị tắt đột ngột rồi được chốt lại báo cáo từ CSV (nút "🧾 Chốt lại
+        # báo cáo"). Nhãn phải NÓI RÕ là báo cáo dựng lại, không phải phiên tự
+        # dừng sạch — dữ liệu thô vẫn nguyên nhưng số liệu là suy ra từ đĩa.
+        return "Đã chốt lại từ dữ liệu thô"
     if session.status == STATUS_CRASHED:
         return "Tắt ngang"
-    return "Tắt ngang (không chốt báo cáo)"
+    return "Tắt ngang (bị tắt đột ngột, chưa chốt báo cáo)"
 
 
 def report_files(run_dir: Path) -> List[Path]:
@@ -683,6 +733,11 @@ def run_history_row(
         # `meta.json` (cũng 0 vì bản cũ không có tạm dừng thật).
         "paused_seconds": _as_float(summary.get("paused_seconds")) if summary.get(
             "paused_seconds") not in (None, "") else round(session.paused_seconds, 3),
+        # Mốc tạm dừng CHƯA đóng (rỗng = phiên không bị bỏ dở giữa lúc tạm dừng).
+        # Chỉ nút "🧾 Chốt lại báo cáo" cần: phiên bị tắt ngang NGAY TRONG lúc
+        # tạm dừng sẽ có dữ liệu thô kéo dài quá `pause_started_at`, và khoảng
+        # đó phải bị trừ khỏi thời lượng dựng lại chứ không tính là đã đo.
+        "pause_started_at": session.pause_started_at,
         "broker": session.broker,
         "subscribed_topics": "|".join(session.subscribed_topics),
         "stop_reason": session.stop_reason,

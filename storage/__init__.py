@@ -16,6 +16,7 @@ from .session import (
     list_run_dirs,
     normalize_session_label,
     open_session,
+    refinalize_session,
     report_files,
     run_history_row,
     run_summary_row,
@@ -52,4 +53,5 @@ __all__ = [
     "normalize_session_label",
     "safe_name_slug",
     "set_session_label",
+    "refinalize_session",
 ]
