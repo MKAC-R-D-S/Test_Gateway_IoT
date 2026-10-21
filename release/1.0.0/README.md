@@ -267,22 +267,57 @@ nào khôi phục được), nên không thể chỉ khớp tên cột. Tool dò
 đúng tên cột → **dò theo giá trị** (cột toàn IPv4 hợp lệ = cột IP) → khớp một
 phần → suy đoán cột tên (bỏ cột toàn số như `STT`).
 
+**Chữ lấy từ CSV được BỎ DẤU.** Tên gợi nhớ và ghi chú đọc từ file đều đi qua
+`to_ascii_text()`: `Trạm Bơm Đông` → `Tram Bom Dong`. Lý do không phải thẩm mỹ mà
+là để **không mất chữ** — chữ có dấu đi qua bảng mã ANSI (cp1252) không ném lỗi
+mà bị thay bằng `?`: `Mã quản lý` ghi ra cp1252 thành `Mã qu?n lý` vì `ả`/`ầ`
+không có trong bảng mã đó. Chữ đã bỏ dấu là **thuần ASCII nên bảng mã nào cũng
+đọc đúng**, kể cả khi mở `devices.json` bằng Notepad hệ ANSI. Chữ do tool sinh ra
+(nhãn trạng thái, cảnh báo, lý do lỗi) cũng viết không dấu.
+
+> **Ranh giới có chủ ý:** chỉ **tính năng nhập CSV** bỏ dấu. Hộp thoại thêm/sửa
+> tay, các tab khác và toàn bộ báo cáo vẫn tiếng Việt có dấu. Lỗi kiểm tra dữ
+> liệu từ `device.validate()` cũng giữ nguyên dấu vì hàm đó dùng chung với hộp
+> thoại thêm tay.
+>
+> **Hệ quả cần biết:** bỏ dấu là mất thông tin thật — `GDO-Trạm Bơm` thành
+> `GDO-Tram Bom`. Tên gốc vẫn nằm trong file CSV bạn đưa vào, nên muốn lấy lại
+> thì sửa tay ở hộp thoại *Sửa*.
+
 **Hộp thoại xem trước — lưới an toàn.** Vì ba cột tên trong file thật đều là
 chuỗi tự do, không có tín hiệu nào bảo đảm dò đúng, hộp thoại cho **chọn lại cột**
-Tên / IP / UID và hiện bảng xem trước từng dòng với trạng thái `Thêm mới` /
-`Đã có` / `Lỗi`. Nhập sai sẽ thấy ngay trước khi bấm OK.
+Tên / IP / UID / **Ghi chú** và hiện bảng xem trước từng dòng với trạng thái
+`Them moi` / `Da co` / `Loi`. Nhập sai sẽ thấy ngay trước khi bấm OK.
+
+**Cột Ghi chú riêng cho từng gateway.** Combo **Ghi chu** cho chọn cột trong file
+(ví dụ `Vị trí`, `Người phụ trách`); giá trị cột đó thành ghi chú **riêng của từng
+dòng**, hiện ở cột `Ghi chu` trong bảng xem trước. File không có cột ghi chú thì
+dùng mặc định `Nhap tu <tên file>`. Trước đây cả lô dùng chung một ghi chú.
 
 **Tick chọn từng gateway.** Bảng xem trước có **ô tick ở cột đầu** để chọn đúng
 những con cần đưa vào danh sách, kèm hai nút **Chọn hết** / **Bỏ chọn hết**.
-Dòng `Thêm mới` mặc định **tick sẵn**; dòng `Đã có` và dòng `Lỗi` **không tick
+Dòng `Them moi` mặc định **tick sẵn**; dòng `Da co` và dòng `Loi` **không tick
 được** (không vẽ ô tick — nhập cũng vô ích). Dòng đếm dưới bảng luôn nói rõ
-`Sẽ thêm N/M gateway đang tick`, và nút *Nhập vào danh sách* **khoá lại khi không
+`Se them N/M gateway dang tick`, và nút *Nhap vao danh sach* **khoá lại khi không
 còn dòng nào tick**. Bản thi công thường dài hơn số gateway đo trong một phiên,
 nên đây là cách chọn một nhóm con thay vì nhập hết rồi đi tắt từng con.
 
 > Lựa chọn được giữ theo **số dòng trong file**, không theo chỉ số bảng — nên đổi
 > cột ghép (combo) ở trên vẫn giữ nguyên những gì đã tick, kể cả khi bảng xem
 > trước phải cắt bớt dòng vì file quá dài (giới hạn 5000 dòng).
+
+**Xoá nhiều gateway một lượt.** Nhập xong 38 gateway rồi muốn bỏ bớt thì không
+phải xoá từng con: **bảng chính ở tab Thiết bị cũng có ô tick ở cột đầu**, kèm
+**Chọn hết** / **Bỏ chọn hết** và nút **🗑 Xoá đã chọn**. Hộp xác nhận nêu **đúng
+số lượng** và liệt kê danh sách UID (cắt bớt nếu dài) trước khi xoá, và nhắc rõ
+*"Dữ liệu CSV đã ghi vẫn được giữ nguyên"* — bỏ gateway khỏi danh sách theo dõi
+**không** đụng tới dữ liệu phiên cũ (ràng buộc bất di bất dịch: `data/runs/*/mqtt/`
+và `ping/` chỉ đọc). Nút *Xoá đã chọn* **khoá khi chưa tick gì**. Nút **🗑 Xoá**
+một con vẫn giữ nguyên như cũ.
+
+> Ô tick ở bảng chính được vẽ ở **cột 0** (`CheckableDictTableModel` chỉ vẽ ở cột
+> đó), nên cột *Bật* đã dịch sang cột 1. Trạng thái tick **không được lưu** vào
+> `devices.json` — đóng tool là quên, tránh xoá nhầm ở lần mở sau.
 
 **Gateway UID lấy từ đâu.** Ưu tiên cột UID trong file; nếu file **không có** cột
 UID (như bản thi công mạng — chỉ có `SN`) thì tra `SN` → cột `series` của danh

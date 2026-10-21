@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 
-from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt, pyqtSignal
 from PyQt5.QtGui import QColor
 
 from . import theme
@@ -198,6 +198,12 @@ class CheckableDictTableModel(DictTableModel):
     #: Khoá trong dict của dòng giữ trạng thái tick.
     CHECK_KEY = "_check"
 
+    #: Phát khi trạng thái tick đổi. Vì sao cần tín hiệu riêng thay vì dùng
+    #: `dataChanged`: bảng theo dõi ping gọi `update_row()` cho TỪNG dòng, mỗi lần
+    #: lại phát `dataChanged` — nối vào đó thì bảng 1000 dòng phải tính lại nhãn
+    #: đếm 1000 lần mỗi chu kỳ ping. Tín hiệu này chỉ phát đúng lúc người dùng tick.
+    check_toggled = pyqtSignal()
+
     def __init__(
         self,
         columns: Sequence[str],
@@ -206,9 +212,14 @@ class CheckableDictTableModel(DictTableModel):
         color_column: str = "",
         color_map: Optional[Dict[str, str]] = None,
         formatters: Optional[Dict[str, Callable[[Any], str]]] = None,
+        align_right: Sequence[str] = (),
+        row_tooltips: Optional[Dict[str, Callable[[Dict[str, Any]], str]]] = None,
         checkable: Optional[Callable[[Dict[str, Any]], bool]] = None,
         parent=None,
     ) -> None:
+        # `align_right`/`row_tooltips` phải forward xuống lớp cha: bảng chính ở tab
+        # Thiết bị dùng cả hai cho cột "Tỉ lệ ping", mà lớp cha mới là nơi cài đặt
+        # chúng. Thiếu hai tham số này thì cột đó lặng lẽ mất căn phải + tooltip.
         super().__init__(
             columns,
             headers,
@@ -216,6 +227,8 @@ class CheckableDictTableModel(DictTableModel):
             color_column=color_column,
             color_map=color_map,
             formatters=formatters,
+            align_right=align_right,
+            row_tooltips=row_tooltips,
             parent=parent,
         )
         # Không truyền `checkable` ⇒ mọi dòng đều tick được.
@@ -259,6 +272,7 @@ class CheckableDictTableModel(DictTableModel):
             return False
         row[self.CHECK_KEY] = (value == Qt.Checked)
         self.dataChanged.emit(index, index)
+        self.check_toggled.emit()
         return True
 
 

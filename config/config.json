@@ -1,5 +1,5 @@
 {
-    "mqtt_host": "45.117.170.179",
+    "mqtt_host": "192.84.106.212",
     "mqtt_port": 1885,
     "mqtt_username": "",
     "mqtt_password": "",
@@ -49,8 +49,8 @@
     "criteria_min_coverage_percent": 80.0,
     "criteria_min_ping_ok_percent": 90.0,
     "criteria_max_late_percent": 5.0,
-    "focused_node_enabled": true,
-    "focused_node_uid": "B93A5E0615E18000FC8B3004",
+    "focused_node_enabled": false,
+    "focused_node_uid": "",
     "focused_node_late_seconds": 30.0,
     "focused_node_detail_limit": 200,
     "ui_refresh_ms": 500,

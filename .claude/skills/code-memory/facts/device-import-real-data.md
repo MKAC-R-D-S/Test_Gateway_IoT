@@ -1,6 +1,6 @@
 ---
 name: device-import-real-data
-description: Số đo trên file thi công thật (40 dòng, 38 mới / 2 đã có) và luật lưu lựa chọn tick theo line_no ở hộp thoại nhập CSV.
+description: Số đo trên file thi công thật (40 dòng, 39 phân giải được + 1 dòng để trống) và luật lưu lựa chọn tick theo line_no ở hộp thoại nhập CSV.
 type: project
 updated: 2026-10-20
 ---
@@ -10,14 +10,25 @@ updated: 2026-10-20
 ## Số đo trên file thi công thật
 
 File `docs/REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv`:
-**40 dòng dữ liệu**, bảng mã cp1252, **0 lỗi**, mọi UID 12 hex, 40 UID duy nhất,
-tên gợi nhớ lấy từ cột `Mã qu?n lý GDO` (ví dụ `GDO-EMS-1F-GW90`).
+**40 dòng dữ liệu**, bảng mã cp1252, tên gợi nhớ lấy từ cột `Mã qu?n lý GDO`
+(ví dụ `GDO-EMS-1F-GW90`).
 
-Đối chiếu `config/devices.json`: **38 mới / 2 đã có**. Hai dòng bị bỏ qua là `34F9199E139C`
-(GDO-PCB4-4F-GW128) và `50F9199E139C` (GDO-PCB4-4F-GW129).
+**39 dòng phân giải được** (UID 12 hex, không trùng nhau) + **1 dòng LỖI có chủ ý**:
+dòng 38 = `GW-126` (`GDO-PCB4-4F-GW126`) để **trống cả cột `SN` lẫn cột `Ð?a ch? IP`**
+vì gateway đó **chưa thi công**. Không có SN thì không tra được danh mục, không có IP
+thì không có gì để dò theo giá trị ⇒ `_resolve_row()` báo
+`"Khong xac dinh duoc Gateway UID"`. Đây là hành vi ĐÚNG, không phải lỗi cần sửa.
 
-**Vì sao quan trọng:** đây là mốc để biết một thay đổi có làm hỏng việc đọc file thật hay không.
-Test `test_file_thi_cong_that` trong `tests/test_device_import.py` khoá lại đúng các con số này.
+**Vì sao quan trọng — bài học đã trả giá:** test `test_file_thi_cong_that` từng khoá
+cứng `38 mới / 2 đã có`, tức khoá vào `config/devices.json`. File đó **đổi mỗi lần
+người dùng nhập thiết bị thật**, nên test vỡ oan sau khi nhập 39 gateway vào cấu hình.
+Nay test chỉ khẳng định các bất biến **của chính file báo cáo** (40 dòng, đúng 1 dòng
+lỗi ở line 38, 39 UID hợp lệ không trùng, `mới + đã có = 39`) — đúng với mọi trạng
+thái cấu hình. **Đừng khoá số phụ thuộc `config/devices.json` vào test.**
+
+Cũng vì vậy mà số dòng dữ liệu trong file này có thể bị người dùng sửa tay (họ đã sửa
+SN dòng GW-102 `…005`→`…003`, IP dòng GW-113 `.35`→`.51`). Sửa file thật thì phải
+chạy lại `pytest tests/test_device_import.py` và cập nhật lại mục này.
 
 ## Luật lưu lựa chọn tick (hộp thoại nhập CSV)
 

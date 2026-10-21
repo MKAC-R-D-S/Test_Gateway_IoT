@@ -1,92 +1,353 @@
 [
     {
-        "uid": "E006199E139C",
-        "name": "MGWI-V1-26070012",
-        "eth_ip": "192.168.10.101",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "7b68469e48294ea6824ead1992014af7"
-    },
-    {
-        "uid": "2CF9199E139C",
-        "name": "MGWI-V1-26070007",
-        "eth_ip": "192.168.10.17",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "81671e5145ac45869ae22cfe4ed981cb"
-    },
-    {
-        "uid": "C006199E139C",
-        "name": "MGWI-V1-26070003",
-        "eth_ip": "192.168.10.115",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "5463016166694ab6b0d1abc7fc550ba1"
-    },
-    {
-        "uid": "04F9199E139C",
-        "name": "MGWI-V1-26070019",
-        "eth_ip": "192.168.10.39",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "27d774755e4d409d858515411ef96f0c"
-    },
-    {
         "uid": "50F9199E139C",
         "name": "MGWI-V1-26070022",
-        "eth_ip": "192.168.10.100",
+        "eth_ip": "192.84.91.54",
         "enabled": true,
         "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "d576b71c4cb6425793de820791e89324"
-    },
-    {
-        "uid": "DCF8199E139C",
-        "name": "MGWI-V1-26070046",
-        "eth_ip": "192.168.10.40",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "3b5e8e8df0574e96945d78bb04f850c5"
-    },
-    {
-        "uid": "1C07199E139C",
-        "name": "MGWI-V1-26070047",
-        "eth_ip": "192.168.10.180",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "f601f51c0fff48f2a0c5ba9629f7e347"
-    },
-    {
-        "uid": "1CF9199E139C",
-        "name": "MGWI-V1-26070031",
-        "eth_ip": "192.168.10.110",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "830e2d6ec3a642f199ff8b00f62a2a6d"
-    },
-    {
-        "uid": "C406199E139C",
-        "name": "MGWI-V1-26070032",
-        "eth_ip": "192.168.10.108",
-        "enabled": true,
-        "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "3096487722314613acf3032f091f9e29"
+        "notes": "Version 1.0.11",
+        "id": "aef3df3071c84ab6805bd5b0c5ab6752"
     },
     {
         "uid": "34F9199E139C",
         "name": "MGWI-V1-26070036",
-        "eth_ip": "192.168.10.33",
+        "eth_ip": "192.84.91.53",
         "enabled": true,
         "ping_enabled": true,
-        "notes": "Version 1.0.5",
-        "id": "aef3df3071c84ab6805bd5b0c5ab6752"
+        "notes": "Version 1.0.11",
+        "id": "803668dadb6f4198863218800dfa79ff"
+    },
+    {
+        "uid": "A006199E139C",
+        "name": "GDO-EMS-1F-GW90",
+        "eth_ip": "192.84.91.10",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "24d8f445f06d4bad8247084352ab0346"
+    },
+    {
+        "uid": "00F9199E139C",
+        "name": "GDO-EMS-1F-GW91",
+        "eth_ip": "192.84.91.11",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "426a0fc49bed412e9ab15210e71fefc5"
+    },
+    {
+        "uid": "D8F8199E139C",
+        "name": "GDO-EMS-2F-GW92",
+        "eth_ip": "192.84.91.12",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "d28f4e83988f4570ab09f3d60d536063"
+    },
+    {
+        "uid": "0456CF453AB4",
+        "name": "GDO-EMS-2F-GW93",
+        "eth_ip": "192.84.91.13",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "18fd5a8ccefd4a10936d798da3cda58e"
+    },
+    {
+        "uid": "CCF8199E139C",
+        "name": "GDO-EMS-3F-GW94",
+        "eth_ip": "192.84.91.14",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "bc9aa42ce7934fa28c3451321c635537"
+    },
+    {
+        "uid": "28F9199E139C",
+        "name": "GDO-EMS-3F-GW95",
+        "eth_ip": "192.84.91.15",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "31b2d444830a4551beb2475ca9e8e185"
+    },
+    {
+        "uid": "1C56CF453AB4",
+        "name": "GDO-EMS-4F-GW96",
+        "eth_ip": "192.84.91.16",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "6fa9e50742af45bbaf0e7912538d6881"
+    },
+    {
+        "uid": "0007199E139C",
+        "name": "GDO-FPC-1F-GW97",
+        "eth_ip": "192.84.91.17",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "d67cf644986e490788542f09c857873e"
+    },
+    {
+        "uid": "0CF9199E139C",
+        "name": "GDO-FPC-2F-GW98",
+        "eth_ip": "192.84.91.18",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "39a9926decae47da87941476bae90f2b"
+    },
+    {
+        "uid": "1807199E139C",
+        "name": "GDO-FPC-4F-GW99",
+        "eth_ip": "192.84.91.19",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "dc4ca3e0f1694a9d936ee596981d80c2"
+    },
+    {
+        "uid": "B8F8199E139C",
+        "name": "GDO-PCB2-1F-GW100",
+        "eth_ip": "192.84.91.20",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "19d2c86486c142cfacdb684215dce2db"
+    },
+    {
+        "uid": "FCF8199E139C",
+        "name": "GDO-PCB2-1F-GW101",
+        "eth_ip": "192.84.91.21",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "d7b67e5892a7430198386ac887eb2095"
+    },
+    {
+        "uid": "C006199E139C",
+        "name": "GDO-PCB2-1F-GW102",
+        "eth_ip": "192.84.91.22",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "5ef05bbf66ab4cae884eec45b1778329"
+    },
+    {
+        "uid": "F8F8199E139C",
+        "name": "GDO-PCB2-2F-GW103",
+        "eth_ip": "192.84.91.23",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "0ac9fa7033e545a49c2af81863c11226"
+    },
+    {
+        "uid": "C806199E139C",
+        "name": "GDO-PCB2-2F-GW104",
+        "eth_ip": "192.84.91.24",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "cc39937d2e264aababde4052bf6b345b"
+    },
+    {
+        "uid": "3CF9199E139C",
+        "name": "GDO-FACT#3-2F-GW105",
+        "eth_ip": "192.84.91.25",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "cecaea5f571244a68c2e02e9ea248b4f"
+    },
+    {
+        "uid": "E806199E139C",
+        "name": "GDO-FACT#3-3F-GW106",
+        "eth_ip": "192.84.91.26",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "23fc296f44a944af83a6092c113e5aa5"
+    },
+    {
+        "uid": "C8F8199E139C",
+        "name": "GDO-FACT#3-3F-GW107",
+        "eth_ip": "192.84.91.27",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "11eae70ac6b7475aa72774f65cd2b387"
+    },
+    {
+        "uid": "E4F8199E139C",
+        "name": "GDO-PCB4-1F-GW108",
+        "eth_ip": "192.84.91.28",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "6f44fcc63c69462b9cb5d2d8f570b8ad"
+    },
+    {
+        "uid": "9806199E139C",
+        "name": "GDO-PCB4-1F-GW109",
+        "eth_ip": "192.84.91.29",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "35270108242f4edeae5cf3a63892dbc0"
+    },
+    {
+        "uid": "8806199E139C",
+        "name": "GDO-PCB4-1F-GW110",
+        "eth_ip": "192.84.91.31",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "2a2a600bde1446a4a5acf4bbc074a8e8"
+    },
+    {
+        "uid": "9C06199E139C",
+        "name": "GDO-PCB4-1F-GW111",
+        "eth_ip": "192.84.91.32",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "2e22e2c5c0b54b6d91a6e0dc9096033c"
+    },
+    {
+        "uid": "A0F8199E139C",
+        "name": "GDO-PCB4-1F-GW112",
+        "eth_ip": "192.84.91.34",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "166e9f3875c040549e5ef82defe092a6"
+    },
+    {
+        "uid": "B4F8199E139C",
+        "name": "GDO-PCB4-1F-GW113",
+        "eth_ip": "192.84.91.51",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "be78b348d656425cbee0baa5b4eb1fb5"
+    },
+    {
+        "uid": "C0F8199E139C",
+        "name": "GDO-PCB4-2F-GW114",
+        "eth_ip": "192.84.91.36",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "4ce9c0891972452dbcb0026723cb5e50"
+    },
+    {
+        "uid": "1CF9199E139C",
+        "name": "GDO-PCB4-2F-GW115",
+        "eth_ip": "192.84.91.37",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "77a5dcc835894da78f180271ccd4df02"
+    },
+    {
+        "uid": "10F9199E139C",
+        "name": "GDO-PCB4-2F-GW116",
+        "eth_ip": "192.84.91.39",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "a86b2f45693948119ca3f114e1d04980"
+    },
+    {
+        "uid": "2CF9199E139C",
+        "name": "GDO-PCB4-2F-GW117",
+        "eth_ip": "192.84.91.40",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "9b2029d6edb74ba1bc3102b5ccff5997"
+    },
+    {
+        "uid": "04F9199E139C",
+        "name": "GDO-PCB4-2F-GW118",
+        "eth_ip": "192.84.91.41",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "3a822e3388a94a0b8a5d5e036c0efec0"
+    },
+    {
+        "uid": "2007199E139C",
+        "name": "GDO-PCB4-3F-GW119",
+        "eth_ip": "192.84.91.42",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "a0f2ac8404384f25893b28c1919bb47e"
+    },
+    {
+        "uid": "08F9199E139C",
+        "name": "GDO-PCB4-3F-GW120",
+        "eth_ip": "192.84.91.43",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "7b5b13c4e8a14127b208ba5714021938"
+    },
+    {
+        "uid": "B006199E139C",
+        "name": "GDO-PCB4-3F-GW121",
+        "eth_ip": "192.84.91.46",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "1069e41842764e65b42102e999313a60"
+    },
+    {
+        "uid": "1C07199E139C",
+        "name": "GDO-PCB4-3F-GW122",
+        "eth_ip": "192.84.91.47",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "172da9e92cda40469daa12a036b4988e"
+    },
+    {
+        "uid": "FC06199E139C",
+        "name": "GDO-PCB4-3F-GW123",
+        "eth_ip": "192.84.91.48",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "d55ca6ef6f7d4edbb78426e80d754f22"
+    },
+    {
+        "uid": "0407199E139C",
+        "name": "GDO-PCB4-3F-GW124",
+        "eth_ip": "192.84.91.49",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "f9ac8c679a8945b19af203c1c9691e8a"
+    },
+    {
+        "uid": "E006199E139C",
+        "name": "GDO-PCB4-4F-GW125",
+        "eth_ip": "192.84.91.50",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "a2c73921e36d40e6a7685f51eed5ba42"
+    },
+    {
+        "uid": "C406199E139C",
+        "name": "GDO-PCB4-4F-GW127",
+        "eth_ip": "192.84.91.52",
+        "enabled": true,
+        "ping_enabled": true,
+        "notes": "Nhập từ REPORT_Thi_Cong_Mang_Gateway_IoT_2026-10-01_v2_HUY(Gateway_List).csv",
+        "id": "35168d3005b543f5bbd6a56ce715e279"
     }
 ]

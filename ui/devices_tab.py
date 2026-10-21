@@ -40,11 +40,13 @@ from core.gateway_directory import load_gateway_catalog
 from core.uid import gateway_uid_variants
 
 from . import theme
-from .table_model import CheckableDictTableModel, DictTableModel, fmt_int
+from .table_model import CheckableDictTableModel, fmt_int
 
-COLUMNS = ["enabled", "uid", "name", "eth_ip", "ping_enabled", "ping_rate", "notes"]
+# Cột `pick` ĐỨNG ĐẦU vì `CheckableDictTableModel` chỉ vẽ ô tick ở cột 0
+# (`ui/table_model.py`). Không có nó thì ô tick đè lên cột "Bật".
+COLUMNS = ["pick", "enabled", "uid", "name", "eth_ip", "ping_enabled", "ping_rate", "notes"]
 HEADERS = [
-    "Bật", "Gateway UID", "Tên gợi nhớ", "Ethernet IP", "Ping",
+    "", "Bật", "Gateway UID", "Tên gợi nhớ", "Ethernet IP", "Ping",
     "Tỉ lệ ping (%)", "Ghi chú",
 ]
 
@@ -173,9 +175,14 @@ class ImportDevicesDialog(QDialog):
     sai, người dùng thấy ngay (`GW-90` thay vì `GDO-…`) và sửa bằng combo.
 
     Mỗi dòng `Thêm mới` có **ô tick** để chọn con nào đưa vào danh sách, kèm nút
-    *Chọn hết* / *Bỏ chọn hết*. Báo cáo thi công thường dài hơn số gateway cần đo
+    *Chon het* / *Bo chon het*. Báo cáo thi công thường dài hơn số gateway cần đo
     trong một phiên, nên nhập hết cả 40 rồi phải đi tắt từng con là việc thừa.
     Dòng `Đã có` và dòng `Lỗi` **không tick được** — nhập cũng vô ích.
+
+    **Mọi chữ hiển thị ở hộp thoại này viết KHÔNG DẤU** (kể cả tên gateway lấy từ
+    file), vì chữ có dấu đi qua bảng mã ANSI sẽ **mất chữ** chứ không báo lỗi:
+    `Mã quản lý` → `Mã qu?n lý`. Chữ không dấu là ASCII nên bảng mã nào cũng đọc
+    đúng. Xem `core/device_import.py:to_ascii_text`.
     """
 
     def __init__(
@@ -186,7 +193,7 @@ class ImportDevicesDialog(QDialog):
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Nhập danh sách thiết bị từ CSV")
+        self.setWindowTitle("Nhap danh sach thiet bi tu CSV")
         self.setMinimumSize(880, 560)
         self._path = path
         self._existing = list(existing)
@@ -214,7 +221,7 @@ class ImportDevicesDialog(QDialog):
 
         # --- ghép cột (người dùng sửa được nếu dò sai) ---------------------
         mapping = QHBoxLayout()
-        mapping.addWidget(QLabel("Cột Tên:"))
+        mapping.addWidget(QLabel("Cot Ten:"))
         self.cmb_name = _ColumnCombo(self._preview, "name")
         mapping.addWidget(self.cmb_name)
         mapping.addWidget(QLabel("Ethernet IP:"))
@@ -223,14 +230,23 @@ class ImportDevicesDialog(QDialog):
         mapping.addWidget(QLabel("Gateway UID / SN:"))
         self.cmb_uid = _ColumnCombo(self._preview, "uid")
         mapping.addWidget(self.cmb_uid)
+        mapping.addWidget(QLabel("Ghi chu:"))
+        self.cmb_notes = _ColumnCombo(self._preview, "notes")
+        self.cmb_notes.setToolTip(
+            "Cột ghi chú riêng cho từng gateway (vị trí, người phụ trách…). "
+            "Bỏ trống thì dùng mặc định “Nhap tu <tên file>”."
+        )
+        mapping.addWidget(self.cmb_notes)
         mapping.addStretch(1)
         layout.addLayout(mapping)
 
         self.lbl_hint = QLabel(
-            "Tool tự dò cột theo tiêu đề và theo giá trị (cột toàn IPv4 hợp lệ = cột IP). "
-            "Nếu dò sai, chọn lại cột ở trên — bảng dưới cập nhật ngay.<br>"
-            "Tick ở cột đầu để chọn gateway đưa vào danh sách; chỉ dòng "
-            "<b>Thêm mới</b> mới tick được."
+            "Tool tu do cot theo tieu de va theo gia tri (cot toan IPv4 hop le = cot IP). "
+            "Neu do sai, chon lai cot o tren — bang duoi cap nhat ngay.<br>"
+            "<b>Chu co dau trong file duoc doi sang khong dau</b> khi nhap "
+            "(vi du <i>Ma quan ly GDO</i>), de mo bang Excel/Notepad he ANSI khong bi mat chu.<br>"
+            "Tick o cot dau de chon gateway dua vao danh sach; chi dong "
+            "<b>Them moi</b> moi tick duoc."
         )
         self.lbl_hint.setWordWrap(True)
         self.lbl_hint.setStyleSheet("color: %s; font-size: 10px;" % theme.COLOR_DIM)
@@ -238,8 +254,8 @@ class ImportDevicesDialog(QDialog):
 
         # --- nút chọn nhanh -------------------------------------------------
         pick_bar = QHBoxLayout()
-        self.btn_check_all = QPushButton("Chọn hết")
-        self.btn_uncheck_all = QPushButton("Bỏ chọn hết")
+        self.btn_check_all = QPushButton("Chon het")
+        self.btn_uncheck_all = QPushButton("Bo chon het")
         for btn in (self.btn_check_all, self.btn_uncheck_all):
             btn.setAutoDefault(False)      # Enter không được kích hoạt nút này
             pick_bar.addWidget(btn)
@@ -249,8 +265,9 @@ class ImportDevicesDialog(QDialog):
         # --- bảng xem trước -------------------------------------------------
         # Cột đầu rỗng: chỗ của ô tick (`CheckableDictTableModel` vẽ vào cột 0).
         self.model = CheckableDictTableModel(
-            ["pick", "uid", "name", "eth_ip", "status", "reason"],
-            ["", "Gateway UID", "Tên gợi nhớ", "Ethernet IP", "Trạng thái", "Ghi chú"],
+            ["pick", "uid", "name", "eth_ip", "notes", "status", "reason"],
+            ["", "Gateway UID", "Ten goi nho", "Ethernet IP", "Ghi chu",
+             "Trang thai", "Ghi chu loi"],
             max_rows=5000,
             color_column="status",
             color_map={
@@ -285,10 +302,10 @@ class ImportDevicesDialog(QDialog):
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Nhập vào danh sách")
+        self.buttons.button(QDialogButtonBox.Ok).setText("Nhap vao danh sach")
         layout.addWidget(self.buttons)
 
-        for combo in (self.cmb_name, self.cmb_ip, self.cmb_uid):
+        for combo in (self.cmb_name, self.cmb_ip, self.cmb_uid, self.cmb_notes):
             combo.currentIndexChanged.connect(self._recompute)
         self.btn_check_all.clicked.connect(lambda: self._set_all(True))
         self.btn_uncheck_all.clicked.connect(lambda: self._set_all(False))
@@ -302,7 +319,7 @@ class ImportDevicesDialog(QDialog):
 
     # ------------------------------------------------------------ chọn dòng
     def _set_all(self, checked: bool) -> None:
-        """Tick/bỏ tick MỌI dòng `Thêm mới` (nút *Chọn hết* / *Bỏ chọn hết*).
+        """Tick/bỏ tick MỌI dòng `Thêm mới` (nút *Chon het* / *Bo chon het*).
 
         Ghi thẳng vào `_ticked` (đủ mọi dòng) rồi mới đẩy xuống bảng — nếu chỉ
         sửa những dòng đang hiện, file dài hơn `max_rows` sẽ còn sót dòng đã bị
@@ -357,8 +374,8 @@ class ImportDevicesDialog(QDialog):
         # Đếm từ `_ticked`/`_preview` chứ không từ bảng: bảng có thể đã cắt bớt
         # dòng khi file dài, còn `_ticked` thì luôn đủ.
         self.lbl_summary.setText(
-            "Sẽ thêm <b>%d</b>/%d gateway đang tick · bỏ qua <b>%d</b> đã có · "
-            "<b>%d</b> dòng lỗi (không nhập)"
+            "Se them <b>%d</b>/%d gateway dang tick · bo qua <b>%d</b> da co · "
+            "<b>%d</b> dong loi (khong nhap)"
             % (len(self._devices), self._preview.count("new"),
                self._preview.count("exists"), self._preview.count("error"))
         )
@@ -374,11 +391,12 @@ class ImportDevicesDialog(QDialog):
                     "name": self.cmb_name.column_index(),
                     "ip": self.cmb_ip.column_index(),
                     "uid": self.cmb_uid.column_index(),
+                    "notes": self.cmb_notes.column_index(),
                 },
                 catalog=self._catalog,
             )
         except ImportError_ as exc:
-            self.lbl_summary.setText("Không đọc được file: %s" % exc)
+            self.lbl_summary.setText("Khong doc duoc file: %s" % exc)
             return
         self._preview = preview
         # Giữ lựa chọn người dùng đã đặt cho những dòng còn nhận diện được; dòng
@@ -400,6 +418,7 @@ class ImportDevicesDialog(QDialog):
                 "uid": row.uid or "—",
                 "name": row.name,
                 "eth_ip": row.eth_ip,
+                "notes": row.notes or "",
                 "status": row.status,
                 "reason": row.reason,
                 CheckableDictTableModel.CHECK_KEY: self._ticked[row.line_no],
@@ -431,7 +450,10 @@ class _ColumnCombo(QComboBox):
 
 
 def _status_label(value: Any) -> str:
-    return {"new": "Thêm mới", "exists": "Đã có", "error": "Lỗi"}.get(
+    # Nhãn KHÔNG DẤU: chữ có dấu qua bảng mã ANSI bị mất chữ (`Thêm mới` →
+    # `Th?m m?i`). Giá trị gốc (`new`/`exists`/`error`) là hợp đồng dữ liệu dùng
+    # cho `color_map` và test — KHÔNG đổi, chỉ đổi nhãn hiển thị.
+    return {"new": "Them moi", "exists": "Da co", "error": "Loi"}.get(
         str(value), str(value)
     )
 
@@ -517,7 +539,7 @@ class DevicesTab(QWidget):
         #: {biến thể gateway UID → dòng ping_summary} — cập nhật qua
         #: `set_ping_stats()`. Rỗng = chưa có số liệu (cột hiện "-").
         self._ping_rows: Dict[str, Dict[str, Any]] = {}
-        self.model = DictTableModel(
+        self.model = CheckableDictTableModel(
             COLUMNS,
             HEADERS,
             max_rows=1000,
@@ -545,6 +567,17 @@ class DevicesTab(QWidget):
         self.btn_delete = QPushButton("🗑  Xoá")
         self.btn_delete.setObjectName("danger")
         self.btn_delete.clicked.connect(self._on_delete)
+        self.btn_delete_picked = QPushButton("🗑  Xoá đã chọn")
+        self.btn_delete_picked.setObjectName("danger")
+        self.btn_delete_picked.setToolTip(
+            "Xoá MỌI gateway đang tick ở cột đầu bảng. Dữ liệu CSV đã ghi của "
+            "phiên cũ vẫn được giữ nguyên."
+        )
+        self.btn_delete_picked.clicked.connect(self._on_delete_picked)
+        self.btn_pick_all = QPushButton("Chọn hết")
+        self.btn_pick_all.clicked.connect(lambda: self._set_all_picked(True))
+        self.btn_pick_none = QPushButton("Bỏ chọn hết")
+        self.btn_pick_none.clicked.connect(lambda: self._set_all_picked(False))
         self.btn_toggle = QPushButton("⏻  Bật/Tắt")
         self.btn_toggle.clicked.connect(self._on_toggle)
         self.btn_import = QPushButton("📥  Nhập từ CSV")
@@ -558,20 +591,30 @@ class DevicesTab(QWidget):
         toolbar.addWidget(self.btn_delete)
         toolbar.addWidget(self.btn_toggle)
         toolbar.addWidget(self.btn_import)
+        toolbar.addWidget(self.btn_pick_all)
+        toolbar.addWidget(self.btn_pick_none)
+        toolbar.addWidget(self.btn_delete_picked)
         toolbar.addStretch(1)
         layout.addLayout(toolbar)
 
         self.table = QTableView()
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        # ExtendedSelection: Ctrl/Shift-click vẫn chọn được nhiều dòng như cũ; việc
+        # xoá nhiều dùng ô tick (ổn định hơn vì không phụ thuộc cuộn bảng).
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setColumnWidth(0, _CHECK_COL_WIDTH)
         # Không bật sọc xen kẽ: nền đè của stylesheet làm sọc thành khó đọc.
         self.table.setAlternatingRowColors(False)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.doubleClicked.connect(lambda _: self._on_edit())
+        # Nhãn đếm và nút "Xoá đã chọn" phải đổi ngay khi tick. Không nối vào
+        # `dataChanged` vì bảng còn cập nhật từng dòng khi có số liệu ping mới
+        # (`_repaint_ping_column`), mỗi dòng lại phát một tín hiệu.
+        self.model.check_toggled.connect(self._update_info)
         layout.addWidget(self.table, 1)
 
         self.lbl_info = QLabel("")
@@ -681,6 +724,12 @@ class DevicesTab(QWidget):
                 " Cột “Tỉ lệ ping” sẽ có số liệu sau khi phiên test chạy "
                 "(đọc từ reports/ping_summary.csv)."
             )
+
+        picked = len(self._picked_uids())
+        if picked:
+            text += " • Đang tick <b>%d</b> gateway — bấm “🗑  Xoá đã chọn” để bỏ." % picked
+        # Không tick gì thì nút xoá nhiều vô nghĩa — khoá lại cho khỏi bấm hụt.
+        self.btn_delete_picked.setEnabled(bool(picked))
         self.lbl_info.setText(text)
 
     def _selected_index(self) -> int:
@@ -743,6 +792,77 @@ class DevicesTab(QWidget):
         self._devices.pop(index)
         self._commit("Đã xoá %s" % device.uid)
 
+    # ------------------------------------------------------- tick & xoá nhiều
+    def _picked_uids(self) -> List[str]:
+        """Gateway UID của mọi dòng đang tick.
+
+        Tra theo **`uid` trong dict dòng**, KHÔNG theo chỉ số dòng: model là
+        `deque(maxlen=...)` nên khi danh sách vượt `max_rows` thì dòng ĐẦU bị bỏ
+        và chỉ số dòng lệch khỏi chỉ số `self._devices` (lỗi tiềm ẩn đã có ở
+        `_selected_index()`).
+        """
+        picked = []
+        for row in self.model.rows():
+            if not row.get(CheckableDictTableModel.CHECK_KEY):
+                continue
+            uid = str(row.get("uid") or "")
+            # Dòng bị cắt khỏi bảng vẫn còn trong `_devices`; tra theo UID nên
+            # vẫn xoá đúng con đó.
+            picked.append(uid)
+        return picked
+
+    def _set_all_picked(self, checked: bool) -> None:
+        """Tick/bỏ tick mọi dòng đang hiện trên bảng (nút *Chọn hết*/*Bỏ chọn hết*)."""
+        # Chỉ ghi lên `self.model`: `_row_for()` cố tình KHÔNG chứa khoá `pick`,
+        # nên trạng thái tick chỉ sống ở tầng model — không có bản sao thứ hai để lệch.
+        self.model.reset_rows([
+            dict(row, **{CheckableDictTableModel.CHECK_KEY: bool(checked)})
+            for row in self.model.rows()
+        ])
+        self._update_info()
+
+    def _on_delete_picked(self) -> None:
+        """Xoá MỌI gateway đang tick — xác nhận có SỐ LƯỢNG và danh sách UID."""
+        picked = self._picked_uids()
+        if not picked:
+            QMessageBox.information(
+                self, "Chưa chọn",
+                "Hãy tick ở cột đầu bảng những gateway muốn xoá,\n"
+                "hoặc bấm “Chọn hết” để tick tất cả.",
+            )
+            return
+
+        # Danh sách UID có thể dài 38 dòng → cắt bớt cho hộp thoại không tràn màn hình,
+        # nhưng LUÔN nêu đúng tổng số.
+        shown = picked[:12]
+        listing = "\n".join("  • %s" % uid for uid in shown)
+        if len(picked) > len(shown):
+            listing += "\n  … và %d gateway nữa" % (len(picked) - len(shown))
+
+        answer = QMessageBox.question(
+            self,
+            "Xoá %d gateway" % len(picked),
+            "Xoá %d gateway khỏi danh sách theo dõi?\n\n%s\n\n"
+            "Dữ liệu CSV đã ghi vẫn được giữ nguyên."
+            % (len(picked), listing),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        victims = set(picked)
+        before = len(self._devices)
+        self._devices = [d for d in self._devices if d.uid not in victims]
+        removed = before - len(self._devices)
+        self._commit("Đã xoá %d gateway" % removed)
+        if removed < len(victims):     # UID tick được nhưng không còn trong danh sách
+            QMessageBox.information(
+                self, "Đã xoá",
+                "Đã xoá %d gateway (%d dòng tick không còn trong danh sách)."
+                % (removed, len(victims) - removed),
+            )
+
     def _on_toggle(self) -> None:
         index = self._selected_index()
         if index < 0:
@@ -752,9 +872,14 @@ class DevicesTab(QWidget):
         self._commit("Đã đổi trạng thái %s" % self._devices[index].uid)
 
     def _on_import(self) -> None:
-        """Nhập danh sách gateway từ file CSV (bản thi công mạng / danh mục)."""
+        """Nhập danh sách gateway từ file CSV (bản thi công mạng / danh mục).
+
+        Mọi chữ ở đây viết KHÔNG DẤU cùng với hộp thoại `ImportDevicesDialog`:
+        chúng thuộc tính năng nhập CSV, mà đó là phần người dùng đã yêu cầu bỏ
+        dấu. Phần còn lại của tool (thêm/sửa tay…) giữ nguyên tiếng Việt.
+        """
         path, _ = QFileDialog.getOpenFileName(
-            self, "Nhập danh sách thiết bị từ CSV", str(Path.home()), "CSV (*.csv)"
+            self, "Nhap danh sach thiet bi tu CSV", str(Path.home()), "CSV (*.csv)"
         )
         if not path:
             return
@@ -763,10 +888,10 @@ class DevicesTab(QWidget):
                 path, self._devices, load_gateway_catalog(), self
             )
         except ImportError_ as exc:
-            QMessageBox.warning(self, "Không đọc được file", str(exc))
+            QMessageBox.warning(self, "Khong doc duoc file", str(exc))
             return
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "Không đọc được file",
+            QMessageBox.warning(self, "Khong doc duoc file",
                                 "%s: %s" % (type(exc).__name__, exc))
             return
 
@@ -776,8 +901,8 @@ class DevicesTab(QWidget):
         added = dialog.devices()
         if not added:
             QMessageBox.information(
-                self, "Không có gì để nhập",
-                "Không có gateway mới nào để thêm vào danh sách.",
+                self, "Khong co gi de nhap",
+                "Khong co gateway moi nao de them vao danh sach.",
             )
             return
 
@@ -802,15 +927,15 @@ class DevicesTab(QWidget):
 
         if not unique:
             QMessageBox.information(
-                self, "Không có gì để nhập",
-                "Toàn bộ gateway trong file đã có trong danh sách.",
+                self, "Khong co gi de nhap",
+                "Toan bo gateway trong file da co trong danh sach.",
             )
             return
 
         self._devices.extend(unique)
         self._commit("Đã nhập %d gateway từ CSV" % len(unique))
         QMessageBox.information(
-            self, "Đã nhập",
-            "Đã thêm %d gateway vào danh sách theo dõi.\n\n"
-            "Danh sách đã được lưu vào config/devices.json." % len(unique),
+            self, "Da nhap",
+            "Da them %d gateway vao danh sach theo doi.\n\n"
+            "Danh sach da duoc luu vao config/devices.json." % len(unique),
         )

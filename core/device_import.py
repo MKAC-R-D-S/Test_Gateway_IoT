@@ -84,6 +84,10 @@ _HEADER_KEYS: Dict[str, Tuple[str, ...]] = {
     "name": ("ten goi nho", "ten gateway", "gateway name", "ten",
              "ma quan ly gdo", "gdo", "ma quan ly", "vi tri",
              "name", "label", "model"),
+    # Đứng CUỐI vì đây là vai trò ít quan trọng nhất: nếu để lẫn lên trên, khoá
+    # `mo ta`/`description` có thể cướp mất cột mà `name` cần.
+    "notes": ("ghi chu", "note", "notes", "remark", "comment",
+              "mo ta", "description"),
 }
 
 #: Khoá **chỉ** dùng ở tầng khớp MỘT PHẦN, không dùng ở tầng khớp ĐÚNG.
@@ -118,6 +122,7 @@ class ImportPreviewRow:
     uid: str = ""
     name: str = ""
     eth_ip: str = ""
+    notes: str = ""               # ghi chú: từ cột trong file, hoặc "Nhap tu <file>"
     status: str = "new"           # new | exists | error
     reason: str = ""              # lý do khi status == "error"
     uid_source: str = ""          # file | catalog | ""
@@ -224,10 +229,12 @@ def read_csv_tolerant(path: object) -> Tuple[List[str], List[List[str]], str, st
     try:
         data = file_path.read_bytes()
     except OSError as exc:
-        raise ImportError_("Không mở được file: %s" % exc) from exc
+        # Chữ do module này sinh thì bỏ dấu; `exc` giữ nguyên vì trong đó có
+        # ĐƯỜNG DẪN THẬT của người dùng — bỏ dấu nó là chỉ sai đường dẫn đi.
+        raise ImportError_("Khong mo duoc file: %s" % exc) from exc
 
     if not data.strip():
-        raise ImportError_("File rỗng.")
+        raise ImportError_("File rong.")
 
     text, encoding = decode_csv_bytes(data)
     # Cắt dòng `sep=X` TRƯỚC khi tách cột — xem `_split_sep_line`.
@@ -237,12 +244,12 @@ def read_csv_tolerant(path: object) -> Tuple[List[str], List[List[str]], str, st
     try:
         raw_rows = [row for row in reader]
     except csv.Error as exc:
-        raise ImportError_("File CSV không hợp lệ: %s" % exc) from exc
+        raise ImportError_("File CSV khong hop le: %s" % exc) from exc
 
     # Bỏ dòng rỗng.
     rows = [row for row in raw_rows if any(str(cell).strip() for cell in row)]
     if not rows:
-        raise ImportError_("File không có dòng dữ liệu nào.")
+        raise ImportError_("File khong co dong du lieu nao.")
 
     header = [str(cell).strip() for cell in rows[0]]
     return header, rows[1:], encoding, delimiter
@@ -302,12 +309,47 @@ def strip_accents(text: object) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_only.lower()).strip()
 
 
+def to_ascii_text(text: object) -> str:
+    """Bỏ dấu tiếng Việt cho **văn bản hiển thị** — giữ nguyên hoa/thường.
+
+    Vì sao cần: chữ có dấu đi qua bảng mã ANSI (cp1252) sẽ **mất chữ** chứ không
+    ném lỗi — `Mã quản lý` thành `Mã qu?n lý` vì `ả`/`ầ` không có trong cp1252.
+    Chữ đã bỏ dấu thì thuần ASCII nên **mọi bảng mã đều đọc đúng**, kể cả khi
+    người dùng mở lại `devices.json` hay báo cáo bằng Excel/Notepad hệ ANSI.
+
+    Khác `strip_accents` ở hai điểm, và đó là lý do phải có hàm riêng:
+      - **giữ hoa/thường** (`Mã GDO` → `Ma GDO`, không phải `ma gdo`);
+      - **giữ dấu câu** (`GDO-EMS-1F` → `GDO-EMS-1F`, không thành `gdo ems 1f`).
+
+    `strip_accents` dùng cho việc SO TÊN CỘT nên hạ chữ thường + bỏ dấu câu là
+    đúng; dùng nó cho tên gợi nhớ sẽ phá dữ liệu người dùng.
+    """
+    value = str(text or "")
+    for src, dst in (("đ", "d"), ("Đ", "D"), ("ð", "d"), ("Ð", "D")):
+        value = value.replace(src, dst)
+    decomposed = unicodedata.normalize("NFD", value)
+    ascii_only = decomposed.encode("ascii", "ignore").decode("ascii")
+    # Dấu câu không thuộc ASCII bị `ignore` ăn mất, có thể để lại khoảng trắng
+    # đôi (`"lý — Cổng"` → `"ly  Cong"`); gộp lại cho gọn.
+    return re.sub(r"\s+", " ", ascii_only).strip()
+
+
+def has_non_ascii(text: object) -> bool:
+    """True nếu chuỗi có ký tự ngoài ASCII (tức sẽ bị `to_ascii_text` đổi khác)."""
+    try:
+        str(text or "").encode("ascii")
+        return False
+    except UnicodeEncodeError:
+        return True
+
+
 def detect_columns(
     header: Sequence[str],
     rows: Sequence[Sequence[str]],
     catalog: Optional[Dict[str, str]] = None,
 ) -> Dict[str, int]:
-    """Đoán chỉ số cột cho từng vai trò → `{"uid": i, "name": i, "ip": i, "serial": i}`.
+    """Đoán chỉ số cột cho từng vai trò → `{"uid": i, "name": i, "ip": i, "serial": i,
+    "notes": i}`.
 
     Bốn tầng, mỗi cột chỉ thuộc MỘT vai trò:
 
@@ -423,6 +465,20 @@ def _cell(row: Sequence[str], index: Optional[int]) -> str:
     return str(row[index]).strip()
 
 
+def _has_diacritics_in_column(
+    raw_rows: Sequence[Sequence[str]], index: Optional[int]
+) -> bool:
+    """True nếu cột `index` của file có ít nhất một ô chứa ký tự ngoài ASCII.
+
+    Phải soi Ô GỐC trong file, không soi `ImportPreviewRow`: giá trị trong đó đã
+    qua `to_ascii_text()` rồi, mà hàm đó idempotent — so lại thì không bao giờ
+    thấy khác, cảnh báo sẽ không bao giờ hiện.
+    """
+    if index is None or int(index) < 0:
+        return False
+    return any(has_non_ascii(_cell(row, int(index))) for row in raw_rows)
+
+
 def _catalog_by_serial(catalog: Dict[str, str]) -> Dict[str, str]:
     """Đảo danh mục thành bảng tra `{SN (in hoa) → UID}` để ghép khi file thiếu UID.
 
@@ -477,22 +533,25 @@ def build_preview(
     # không có danh mục để tra — khi đó MỌI dòng đều lỗi, nên phải cảnh báo.
     if "uid" not in preview.columns and not catalog:
         preview.warnings.append(
-            "File không có cột UID và không đọc được danh mục "
-            "`docs/Danh sach 55 gateway.csv` để tra UID theo SN — sẽ không dòng "
-            "nào nhập được."
+            "File khong co cot UID va khong doc duoc danh muc "
+            "`docs/Danh sach 55 gateway.csv` de tra UID theo SN - se khong dong "
+            "nao nhap duoc."
         )
+    # Chú ý: mọi chuỗi cảnh báo ở đây phải THUẦN ASCII. Ngoặc kép cong “ ” và
+    # gạch dài — tuy chỉ là dấu câu nhưng vẫn ngoài ASCII, nên cũng bị bảng mã
+    # ANSI ăn mất — đúng cái đang muốn tránh.
     if encoding.startswith("utf-16"):
         preview.warnings.append(
-            "File là UTF-16 (Excel “Unicode Text”). Đã đọc được, nhưng hãy lưu lại "
-            "dạng “CSV UTF-8” — Excel chỉ mở đúng định dạng đó."
+            "File la UTF-16 (Excel 'Unicode Text'). Da doc duoc, nhung hay luu lai "
+            "dang 'CSV UTF-8' - Excel chi mo dung dinh dang do."
         )
     elif encoding not in ("utf-8-sig", "utf-8"):
         preview.warnings.append(
-            "File dùng bảng mã %s (không phải UTF-8). Đã đọc được, nhưng nên lưu "
-            "lại dạng “CSV UTF-8” nếu muốn mở bằng Excel không lỗi dấu." % encoding
+            "File dung bang ma %s (khong phai UTF-8). Da doc duoc, nhung nen luu "
+            "lai dang 'CSV UTF-8' neu muon mo bang Excel khong loi dau." % encoding
         )
     if "ip" not in preview.columns:
-        preview.warnings.append("Không nhận ra cột địa chỉ IP — hãy chọn cột ở trên.")
+        preview.warnings.append("Khong nhan ra cot dia chi IP - hay chon cot o tren.")
 
     # Bảng tra theo biến thể UID để 11 hex và 12 hex không bị coi là 2 gateway.
     existing_variants = set()
@@ -501,14 +560,25 @@ def build_preview(
 
     seen: Dict[str, int] = {}
     serial_index = _catalog_by_serial(catalog)
-    notes = "Nhập từ %s" % Path(str(path)).name
+    default_notes = to_ascii_text("Nhập từ %s" % Path(str(path)).name)
+    notes_from_file = "notes" in preview.columns
 
     for offset, row in enumerate(raw_rows):
         line_no = offset + 2  # +1 header, +1 vì 1-based
         item = _resolve_row(
-            row, preview.columns, serial_index, existing_variants, seen, line_no, notes
+            row, preview.columns, serial_index, existing_variants, seen, line_no,
+            default_notes,
         )
         preview.rows.append(item)
+
+    # Cảnh báo khi việc bỏ dấu THẬT SỰ làm đổi chữ, để người dùng không tưởng
+    # tool đọc sai file. Soi ô GỐC trong file (`_has_diacritics_in_column`), chứ
+    # không soi `row.notes` đã bỏ dấu — so lại trên đầu ra thì không bao giờ khác.
+    if (notes_from_file
+            and _has_diacritics_in_column(raw_rows, preview.columns.get("notes"))):
+        preview.warnings.append(
+            "Co chu co dau trong cot Ghi chu da duoc doi sang khong dau."
+        )
 
     return preview
 
@@ -520,15 +590,23 @@ def _resolve_row(
     existing_variants: set,
     seen: Dict[str, int],
     line_no: int,
-    notes: str = "",
+    default_notes: str = "",
 ) -> ImportPreviewRow:
-    """Phân giải MỘT dòng thành thiết bị (hoặc ghi lý do lỗi)."""
+    """Phân giải MỘT dòng thành thiết bị (hoặc ghi lý do lỗi).
+
+    Mọi chữ lấy từ file (tên gợi nhớ, ghi chú) đều đi qua `to_ascii_text()`: chữ có
+    dấu khi ghi ra bảng mã ANSI sẽ mất chữ (`Mã` → `M?`), còn chữ không dấu là
+    ASCII nên bảng mã nào cũng đọc đúng.
+    """
     item = ImportPreviewRow(line_no=line_no)
 
     raw_uid = _cell(row, columns.get("uid"))
     serial = _cell(row, columns.get("serial"))
-    name = _cell(row, columns.get("name"))
+    # Tên hiển thị: bỏ dấu để không phụ thuộc bảng mã của người mở file sau này.
+    name = to_ascii_text(_cell(row, columns.get("name")))
     eth_ip = _cell(row, columns.get("ip"))
+    notes = to_ascii_text(_cell(row, columns.get("notes"))) or default_notes
+    item.notes = notes
 
     # --- UID: ưu tiên cột UID trong file, sau đó tra danh mục theo SN
     uid = normalize_hex_uid(raw_uid)
@@ -541,8 +619,8 @@ def _resolve_row(
             item.uid_source = "catalog"
     if not uid:
         item.status = "error"
-        item.reason = ("Không xác định được Gateway UID"
-                       + (" (SN %s không có trong danh mục)" % serial if serial else ""))
+        item.reason = ("Khong xac dinh duoc Gateway UID"
+                       + (" (SN %s khong co trong danh muc)" % serial if serial else ""))
         item.name, item.eth_ip = name, eth_ip
         return item
 
@@ -550,20 +628,23 @@ def _resolve_row(
     uid = uid.rjust(12, "0")
     item.uid, item.name, item.eth_ip = uid, name, eth_ip
 
+    # Ba thông báo dưới đây do MODULE NÀY sinh nên bỏ dấu được. Riêng lỗi từ
+    # `device.validate()` (cuối hàm) GIỮ NGUYÊN dấu — hàm đó dùng chung với hộp
+    # thoại thêm/sửa tay, không thuộc phạm vi "bỏ dấu phần nhập CSV".
     if not is_valid_ipv4(eth_ip):
         item.status = "error"
-        item.reason = "Địa chỉ IP không hợp lệ: %r" % eth_ip
+        item.reason = "Dia chi IP khong hop le: %r" % eth_ip
         return item
 
     if uid in seen:
         item.status = "error"
-        item.reason = "Trùng với dòng %d trong cùng file" % seen[uid]
+        item.reason = "Trung voi dong %d trong cung file" % seen[uid]
         return item
     seen[uid] = line_no
 
     if existing_variants & gateway_uid_variants(uid):
         item.status = "exists"
-        item.reason = "Đã có trong danh sách — giữ nguyên"
+        item.reason = "Da co trong danh sach - giu nguyen"
         return item
 
     device = GatewayDevice(

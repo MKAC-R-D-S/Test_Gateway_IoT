@@ -232,6 +232,8 @@ và 2 ô tick **đưa vào phiên test** / **bật ping**.
 - **🗑 Xoá** — bỏ khỏi danh sách theo dõi
 - **⏻ Bật/Tắt** — tạm loại gateway khỏi phiên mà không xoá
 - **📥 Nhập từ CSV** — nạp cả danh sách từ file (xem mục dưới)
+- **Chọn hết** / **Bỏ chọn hết** — tick nhanh cả bảng (ô tick ở cột đầu)
+- **🗑 Xoá đã chọn** — bỏ một lượt nhiều gateway đang tick (xem mục dưới)
 
 #### 📥 Nhập cả danh sách từ file CSV
 
@@ -239,41 +241,71 @@ Thay vì gõ tay từng gateway, bấm **📥 Nhập từ CSV** rồi chọn fil
 mạng** (file `.csv` bên thi công gửi). Tool tự lấy: **UID**, **tên**, **địa chỉ IP**.
 
 1. Bấm **📥 Nhập từ CSV** → chọn file.
-2. Hộp thoại **xem trước** hiện ra: chọn lại cột nếu tool dò sai (ô *Cột Tên* /
-   *Ethernet IP* / *Gateway UID*), và xem bảng kết quả từng dòng.
-   - `Thêm mới` — sẽ được thêm vào danh sách
-   - `Đã có` — đã nằm trong danh sách, **giữ nguyên**, không ghi đè
-   - `Lỗi` — không nhập, có ghi rõ lý do ở cột *Ghi chú*
+2. Hộp thoại **xem trước** hiện ra: chọn lại cột nếu tool dò sai (ô *Cot Ten* /
+   *Ethernet IP* / *Gateway UID / SN* / *Ghi chu*), và xem bảng kết quả từng dòng.
+   - `Them moi` — sẽ được thêm vào danh sách
+   - `Da co` — đã nằm trong danh sách, **giữ nguyên**, không ghi đè
+   - `Loi` — không nhập, có ghi rõ lý do ở cột *Ghi chu loi*
 3. **Tick chọn từng gateway muốn test** ở cột đầu bảng (xem mục dưới).
-4. Bấm **Nhập vào danh sách**. Danh sách được lưu ngay vào `config/devices.json`.
+4. Bấm **Nhap vao danh sach**. Danh sách được lưu ngay vào `config/devices.json`.
+
+> **Chữ trong hộp thoại này viết KHÔNG DẤU là cố ý, không phải lỗi.** Chữ có dấu
+> đi qua bảng mã ANSI sẽ **mất chữ** (`Mã quản lý` → `Mã qu?n lý`) chứ không báo
+> lỗi gì. Chữ không dấu là ASCII nên mở bằng Excel hay Notepad kiểu nào cũng đọc
+> đúng. Vì vậy tool cũng **bỏ dấu tên gateway lấy từ file**: `Trạm Bơm Đông` được
+> lưu thành `Tram Bom Dong`. Tên gốc vẫn còn trong file CSV bên thi công; muốn
+> đổi lại thì sửa tay ở nút *Sửa*.
+
+**Ghi chú riêng cho từng gateway.** Ô **Ghi chu** cho bạn chọn cột trong file để
+làm ghi chú (ví dụ cột `Vị trí`, `Người phụ trách`). Mỗi gateway nhận ghi chú
+**riêng của dòng nó**, hiện ngay ở cột *Ghi chu* trong bảng xem trước. File không
+có cột ghi chú thì tool ghi mặc định `Nhap tu <tên file>`.
 
 **Chọn gateway nào để test.** Bảng xem trước có **ô tick ở cột đầu tiên** — tick
 đúng những con bạn muốn đưa vào danh sách theo dõi.
 
-- Dòng `Thêm mới` **được tick sẵn**; dòng `Đã có` và `Lỗi` **không tick được**
+- Dòng `Them moi` **được tick sẵn**; dòng `Da co` và `Loi` **không tick được**
   (nhập cũng vô ích), nên bạn không cần bận tâm hai loại dòng đó.
-- Muốn lấy hết: bấm **Chọn hết**. Muốn bỏ hết rồi tick lại từ đầu: **Bỏ chọn hết**.
+- Muốn lấy hết: bấm **Chon het**. Muốn bỏ hết rồi tick lại từ đầu: **Bo chon het**.
 - Dòng chữ dưới bảng luôn cho biết đang chọn bao nhiêu, ví dụ
-  *Sẽ thêm **12**/38 gateway đang tick*. **Bỏ tick hết** thì nút *Nhập vào danh
-  sách* bị khoá — không sợ bấm nhầm khi chưa chọn gì.
-- Nếu đổi ô *Cột Tên* / *Ethernet IP* / *Gateway UID* ở trên, tool dò lại bảng
-  nhưng **giữ nguyên những gì bạn đã tick**.
+  *Se them **12**/38 gateway dang tick*. **Bỏ tick hết** thì nút *Nhap vao danh
+  sach* bị khoá — không sợ bấm nhầm khi chưa chọn gì.
+- Nếu đổi ô *Cot Ten* / *Ethernet IP* / *Gateway UID* / *Ghi chu* ở trên, tool dò
+  lại bảng nhưng **giữ nguyên những gì bạn đã tick**.
 
 > Dùng khi nào: bản thi công có thể liệt kê cả chục gateway mà mỗi phiên đo bạn
 > chỉ cần một nhóm. Nhập cả danh sách rồi đi tắt từng con sẽ mất công hơn.
 
+**Nhập xong muốn bỏ bớt nhiều con một lúc.** Bảng gateway ở tab **🛰 Thiết bị**
+cũng có **ô tick ở cột đầu**, y như hộp thoại nhập:
+
+1. Tick những gateway muốn bỏ (hoặc bấm **Chọn hết** / **Bỏ chọn hết**).
+2. Bấm **🗑 Xoá đã chọn**. Hộp xác nhận hiện **đúng số lượng** và liệt kê danh
+   sách UID để bạn soát lại.
+3. Bấm **Yes**. Nút này **bị khoá khi bạn chưa tick gì** nên không sợ bấm nhầm.
+
+> **Bỏ gateway khỏi danh sách KHÔNG xoá dữ liệu đã đo.** Dữ liệu thô của các
+> phiên cũ vẫn nằm nguyên trong `data/runs/...` — hộp xác nhận cũng nhắc rõ điều
+> này. Tool chỉ thôi theo dõi con đó ở các phiên sau.
+>
+> Trạng thái tick **không được lưu lại**: đóng tool rồi mở lại là bảng sạch, đúng
+> ý muốn "xoá xong thì thôi". Muốn xoá một con thì vẫn dùng nút **🗑 Xoá** như cũ
+> (chọn dòng rồi bấm).
+
 > **File Excel lưu kiểu nào cũng được.** Tool đọc được `CSV UTF-8` (khuyến nghị),
 > `UTF-8` thường, `CSV` (ANSI), và cả **Unicode Text** (UTF-16). Nếu hộp thoại hiện
-> cảnh báo về bảng mã thì vẫn dùng bình thường — chỉ là tên tiếng Việt có thể bị
-> lỗi dấu trong file. Khi lưu bằng Excel, nên chọn
+> cảnh báo về bảng mã thì vẫn dùng bình thường — chỉ là **tên cột** có thể bị hỏng
+> dấu trong file, khiến tool dò cột kém chính xác hơn (khi đó tự chọn lại cột ở
+> các ô phía trên). Khi lưu bằng Excel, nên chọn
 > **“CSV UTF-8 (Comma delimited)”**.
 >
 > **Riêng nhánh ANSI chỉ hỗ trợ một bảng mã.** Windows có nhiều bảng mã "ANSI"
 > khác nhau ghi ra byte y hệt nhau cho cùng một dấu (`ã` và `ă` đều là byte `E3`),
 > nên **không thể** đọc đúng cả hai — tool đã chọn bảng mã của file thi công thực
-> tế. Nếu bạn gặp tên gateway bị sai dấu kiểu `Mă` thay vì `Mã`, hãy **lưu lại
-> file thành `CSV UTF-8`** rồi nhập lại — đó là cách chắc chắn nhất, và cũng là
-> khuyến nghị chung.
+> tế. Điều này chỉ còn ảnh hưởng tới **tên cột** (nên tool dò cột kém chính xác
+> hơn, bạn tự chọn lại cột ở các ô trên); tên gateway thì tool đã bỏ dấu nên không
+> còn bị sai dấu nữa. Muốn chắc chắn nhất thì **lưu lại file thành `CSV UTF-8`**
+> rồi nhập lại.
 
 > **File thi công có thể không có cột UID/MAC** — thường chỉ có **số serial**
 > (SN). Tool tự tra SN đó trong danh mục nhà máy (`docs/Danh sach 55 gateway.csv`)
@@ -380,9 +412,20 @@ Dưới cùng là khung **nhật ký (log)** của chính tool.
 
 ### 5.2. 🛰 Thiết bị
 
-Quản lý danh sách gateway (thêm/sửa/xoá/bật-tắt/**nhập từ CSV**). Cột
-**Tỉ lệ ping (%)** hiển thị tỉ lệ ping đã đo của từng gateway (tra theo UID, chịu
-được khác biệt 11/12 hex). Danh sách này lưu vào `config/devices.json`.
+Quản lý danh sách gateway. Cột **Tỉ lệ ping (%)** hiển thị tỉ lệ ping đã đo của
+từng gateway (tra theo UID, chịu được khác biệt 11/12 hex). Danh sách này lưu vào
+`config/devices.json`.
+
+**Các nút:** **➕ Thêm gateway** · **✎ Sửa** · **🗑 Xoá** · **⏻ Bật/Tắt** ·
+**📥 Nhập từ CSV** · **Chọn hết** · **Bỏ chọn hết** · **🗑 Xoá đã chọn**.
+
+**Ô tick ở cột đầu bảng** dùng để chọn nhiều gateway rồi bỏ một lượt — tick vài
+dòng (hoặc **Chọn hết**) rồi bấm **🗑 Xoá đã chọn**. Nút này **bị khoá khi chưa
+tick gì**, và hộp xác nhận nêu rõ số lượng + danh sách UID trước khi xoá. Xem
+chi tiết ở **§3.2**.
+
+> Cột **Bật** nằm ở cột thứ hai (cột đầu là ô tick). Dòng chữ dưới bảng cho biết
+> đang tick bao nhiêu gateway.
 
 Nếu bên thi công đã gửi **file danh sách gateway (CSV)**, không cần gõ tay: bấm
 **📥 Nhập từ CSV** — xem hướng dẫn đầy đủ ở **§3.2**.

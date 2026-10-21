@@ -45,7 +45,8 @@ Gồm hai phần:
 |---|---|
 | [facts/csv-import-encoding.md](facts/csv-import-encoding.md) | Vì sao chỉ hỗ trợ **một** bảng mã ANSI (cp1252, không phải cp1258); xử lý UTF-16 |
 | [facts/gateway-uid-padding.md](facts/gateway-uid-padding.md) | UID firmware 12 hex nhưng danh mục có 9/10/11 hex — luật zero-pad và `GATEWAY_UID_MIN` |
-| [facts/device-import-real-data.md](facts/device-import-real-data.md) | Số đo trên file thi công thật; luật lưu lựa chọn tick theo `line_no` |
+| [facts/device-import-real-data.md](facts/device-import-real-data.md) | Số đo trên file thi công thật (40 dòng: 39 dùng được + 1 dòng để trống); luật lưu lựa chọn tick theo `line_no` |
+| [facts/ascii-unaccent-why.md](facts/ascii-unaccent-why.md) | Vì sao bỏ dấu chữ lấy từ CSV (mất chữ qua ANSI, không phải crash) + 2 bẫy khi viết test |
 | [facts/release-docs-sync.md](facts/release-docs-sync.md) | 3 nơi phải sửa docs; `release.json` có BOM và hash phải làm mới |
 | [facts/windows-test-invocation.md](facts/windows-test-invocation.md) | Cách chạy test trên máy này (PYTHONIOENCODING, Qt offscreen) và bẫy escape |
 | [facts/raw-data-immutable.md](facts/raw-data-immutable.md) | Bất biến dữ liệu thô — không sửa `mqtt/`, `ping/` |

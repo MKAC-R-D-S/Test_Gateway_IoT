@@ -418,10 +418,17 @@ def main() -> int:
                   "nhận %r" % (dialog.devices()[0].name,))
             check(dialog.devices()[0].eth_ip == "192.84.91.10",
                   "địa chỉ IP nhận đúng")
-            status_index = dialog.model.index(0, 4)
-            check(dialog.model.data(status_index) == "Thêm mới",
-                  "trạng thái dòng hiển thị 'Thêm mới'",
+            # Cột tick (0) + uid + name + eth_ip ⇒ "status" nằm ở cột 5, KHÔNG phải 4.
+            status_index = dialog.model.index(0, 5)
+            check(dialog.model.data(status_index) == "Them moi",
+                  "trạng thái dòng hiển thị 'Them moi' (không dấu)",
                   "nhận %r" % (dialog.model.data(status_index),))
+            note_index = dialog.model.index(0, 4)
+            check(dialog.model.data(note_index) == "Nhap tu report.csv",
+                  "cột 'Ghi chu' hiện mặc định 'Nhap tu <tên file>'",
+                  "nhận %r" % (dialog.model.data(note_index),))
+            check(hasattr(dialog, "cmb_notes"),
+                  "hộp thoại có combo chọn cột 'Ghi chu'")
             check(dialog.model.row_at(0).get("uid") == "A006199E139C",
                   "bảng xem trước hiện đúng UID",
                   "nhận %r" % (dialog.model.row_at(0),))
@@ -538,6 +545,123 @@ def main() -> int:
         check(tab2.devices() == [], "Cancel hộp chọn file → không thêm gateway nào")
         check(_FakeMsgBox.calls == [], "Cancel hộp chọn file → không hiện hộp thoại nào",
               "nhận %r" % (_FakeMsgBox.calls,))
+
+        # --- bảng CHÍNH: tick nhiều gateway rồi xoá một lượt -----------------
+        # Đây cũng là chỗ canh hai bẫy hồi quy khi đổi bảng chính sang
+        # `CheckableDictTableModel`: cột tick phải ở cột 0, và cột "Tỉ lệ ping"
+        # không được mất căn phải + tooltip (lớp con quên forward hai tham số đó).
+        from PyQt5.QtCore import Qt as _Qt2
+        from PyQt5.QtWidgets import QMessageBox as _QMB
+
+        from core.config import GatewayDevice
+        from ui import theme as _theme
+        from ui.table_model import CheckableDictTableModel
+
+        # `_on_delete_picked()` đọc `QMessageBox.Yes`/`.No` để so câu trả lời, nên
+        # lớp giả PHẢI mang đúng hai hằng đó — thiếu là AttributeError (đúng bẫy đã
+        # ghi ở khối chấm lại phía dưới trong file này).
+        class _FakeBox:
+            Yes = _QMB.Yes
+            No = _QMB.No
+            calls = []
+            answer = _QMB.Yes
+
+            @staticmethod
+            def warning(*args, **_kwargs):
+                _FakeBox.calls.append(("warning", args[1] if len(args) > 1 else ""))
+
+            @staticmethod
+            def information(*args, **_kwargs):
+                _FakeBox.calls.append(("information", args[1] if len(args) > 1 else ""))
+
+            @staticmethod
+            def question(*args, **_kwargs):
+                _FakeBox.calls.append(("question", args[1] if len(args) > 1 else ""))
+                return _FakeBox.answer
+
+        def _dev(uid, name, ip):
+            return GatewayDevice(uid=uid, name=name, eth_ip=ip, enabled=True,
+                                 ping_enabled=True)
+
+        picked_tab = DevicesTab([
+            _dev("50F9199E139C", "GDO-A", "192.84.91.10"),
+            _dev("50F9199E139D", "GDO-B", "192.84.91.11"),
+            _dev("50F9199E139E", "GDO-C", "192.84.91.12"),
+        ])
+        check(isinstance(picked_tab.model, CheckableDictTableModel),
+              "bảng chính dùng model có ô tick")
+        check(picked_tab.model.columns[0] == "pick",
+              "ô tick nằm ở CỘT 0 (cột 'Bật' đã dịch sang cột 1)",
+              "nhận %r" % (picked_tab.model.columns,))
+        check(picked_tab.model.columns[picked_tab.model.columns.index("ping_rate")]
+              == "ping_rate" and "ping_rate" in picked_tab.model.align_right,
+              "cột 'Tỉ lệ ping' vẫn được căn phải sau khi đổi model")
+        check("ping_rate" in picked_tab.model.row_tooltips,
+              "cột 'Tỉ lệ ping' vẫn còn tooltip sau khi đổi model")
+        rate_col = picked_tab.model.columns.index("ping_rate")
+        # `theme.right_align()` trả cờ `Qt.Alignment`; `data()` trả `int(...)`.
+        # Ép cả hai về int để phép so không phụ thuộc kiểu enum của PyQt5.
+        check(int(picked_tab.model.data(picked_tab.model.index(0, rate_col),
+                                        _Qt2.TextAlignmentRole))
+              == int(_theme.right_align()),
+              "ô 'Tỉ lệ ping' căn phải thật (so với theme.right_align())",
+              "nhận %r" % (picked_tab.model.data(
+                  picked_tab.model.index(0, rate_col), _Qt2.TextAlignmentRole),))
+        check(picked_tab.btn_delete_picked.isEnabled() is False,
+              "chưa tick gì → nút 'Xoá đã chọn' bị khoá")
+
+        check(picked_tab._picked_uids() == [], "chưa tick → không có UID nào")
+        picked_tab._set_all_picked(True)
+        check(sorted(picked_tab._picked_uids()) ==
+              ["50F9199E139C", "50F9199E139D", "50F9199E139E"],
+              "'Chọn hết' tick cả 3 dòng của bảng chính",
+              "nhận %r" % (picked_tab._picked_uids(),))
+        check(picked_tab.btn_delete_picked.isEnabled(),
+              "có dòng tick → mở khoá nút 'Xoá đã chọn'")
+
+        # Tick lại đúng 2 con rồi xoá — con không tick phải còn nguyên.
+        picked_tab._set_all_picked(False)
+        for row_index in (0, 2):
+            picked_tab.model.setData(picked_tab.model.index(row_index, 0),
+                                     _Qt2.Checked, _Qt2.CheckStateRole)
+        check(sorted(picked_tab._picked_uids()) ==
+              ["50F9199E139C", "50F9199E139E"],
+              "tick riêng lẻ đúng 2 dòng",
+              "nhận %r" % (picked_tab._picked_uids(),))
+
+        _FakeBox.calls = []
+        _FakeBox.answer = _QMB.Yes
+        with mock.patch("ui.devices_tab.QMessageBox", _FakeBox):
+            picked_tab._on_delete_picked()
+        remaining = sorted(d.uid for d in picked_tab.devices())
+        check(remaining == ["50F9199E139D"],
+              "xoá đúng 2 gateway đã tick, con không tick còn nguyên",
+              "nhận %r" % (remaining,))
+        check(any(c[0] == "question" for c in _FakeBox.calls),
+              "xoá nhiều LUÔN hỏi xác nhận trước khi xoá",
+              "nhận %r" % ([c[0] for c in _FakeBox.calls],))
+
+        # Huỷ hộp xác nhận (answer == No) → KHÔNG được xoá gì.
+        before = sorted(d.uid for d in picked_tab.devices())
+        picked_tab._set_all_picked(True)
+        _FakeBox.calls = []
+        _FakeBox.answer = _QMB.No
+        with mock.patch("ui.devices_tab.QMessageBox", _FakeBox):
+            picked_tab._on_delete_picked()
+        check(sorted(d.uid for d in picked_tab.devices()) == before,
+              "bấm 'No' ở hộp xác nhận → không xoá gateway nào",
+              "nhận %r" % ([d.uid for d in picked_tab.devices()],))
+
+        # Bấm 'Xoá đã chọn' khi chưa tick gì → chỉ nhắc, không xoá.
+        picked_tab._set_all_picked(False)
+        _FakeBox.calls = []
+        with mock.patch("ui.devices_tab.QMessageBox", _FakeBox):
+            picked_tab._on_delete_picked()
+        check(sorted(d.uid for d in picked_tab.devices()) == before,
+              "chưa tick mà bấm 'Xoá đã chọn' → không xoá gì")
+        check([c[0] for c in _FakeBox.calls] == ["information"],
+              "chưa tick mà bấm 'Xoá đã chọn' → chỉ hiện thông báo nhắc",
+              "nhận %r" % ([c[0] for c in _FakeBox.calls],))
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
