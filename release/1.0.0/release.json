@@ -3,7 +3,7 @@
     "tool":  "Test Gateway IoT",
     "cli":  "test_gateway_iot",
     "version":  "1.0.0",
-    "built_at":  "2026-11-10T09:34:13Z",
+    "built_at":  "2026-11-10T09:47:07Z",
     "platform":  "windows-x64",
     "entrypoint":  "TestGatewayIoT.exe",
     "python_needed":  false,
@@ -21,8 +21,8 @@
     "files":  [
                   {
                       "path":  "TestGatewayIoT.exe",
-                      "bytes":  45939714,
-                      "sha256":  "66a3f25eb30adaba10e70c336cc2d078e7780e2e9018558b7ebbc25b73961401"
+                      "bytes":  45938908,
+                      "sha256":  "a9206b180837af24177ac0d681971d5c1d6331ee42f9b696347657215d5b433c"
                   },
                   {
                       "path":  "config/config.json",
@@ -36,8 +36,8 @@
                   },
                   {
                       "path":  "docs/Danh sach 55 gateway.csv",
-                      "bytes":  2152,
-                      "sha256":  "b9c724e8de4d79131a29e1eeeb980f936beb7d17e09fd3d727bc10a109188731"
+                      "bytes":  2635,
+                      "sha256":  "bd72befa99e0bbf5472bf2b8a243c31f03472ea5b4d3f482664f0f0c8f110a6e"
                   },
                   {
                       "path":  "HUONG_DAN_SU_DUNG.md",
