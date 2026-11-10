@@ -3,13 +3,13 @@
     "tool":  "Test Gateway IoT",
     "cli":  "test_gateway_iot",
     "version":  "1.0.0",
-    "built_at":  "2026-10-20T09:39:29Z",
+    "built_at":  "2026-11-10T09:34:13Z",
     "platform":  "windows-x64",
     "entrypoint":  "TestGatewayIoT.exe",
     "python_needed":  false,
     "network":  {
                     "note":  "Chi dung TCP/IP thuong (MQTT broker + ICMP ping). KHONG dung 4G/3G/cellular.",
-                    "mqtt_host":  "45.117.170.179",
+                    "mqtt_host":  "192.84.106.212",
                     "mqtt_port":  1885,
                     "requires":  "PC phai thay duoc broker va cac gateway qua LAN/Ethernet (vd 192.168.10.x)"
                 },
@@ -21,18 +21,18 @@
     "files":  [
                   {
                       "path":  "TestGatewayIoT.exe",
-                      "bytes":  45925285,
-                      "sha256":  "89ba330ab5e2c4aa5a5b08cf181ad49e2e5fa70244bc6f4646ce3251a393e3f9"
+                      "bytes":  45939714,
+                      "sha256":  "66a3f25eb30adaba10e70c336cc2d078e7780e2e9018558b7ebbc25b73961401"
                   },
                   {
                       "path":  "config/config.json",
-                      "bytes":  2045,
-                      "sha256":  "98674e619a839325210443f1965a949f42f1aaf8621e2f95e214c4bd98310c6b"
+                      "bytes":  2037,
+                      "sha256":  "ff17b25a69e5fc4e4a0d8488859f7c8338abab67a65fb0aa09cf47b806f92e8d"
                   },
                   {
                       "path":  "config/devices.json",
-                      "bytes":  12686,
-                      "sha256":  "faae4e01208e7e087c1f4c1bb8bdef8a430787024db18a4c1c7e8e4d9fa4cf3d"
+                      "bytes":  1286,
+                      "sha256":  "16e12a3202f65e26a70056b576819d729d5028f62aba1ac849b3b9e1bfe45279"
                   },
                   {
                       "path":  "docs/Danh sach 55 gateway.csv",
