@@ -109,7 +109,7 @@ Mỗi lần chạy tạo `data/<YYYYMMDD_HHMMSS>_<suffix>/`:
 | `reports/mqtt_silence.csv` | Các window im lặng liên tiếp (nghi ngờ mất dữ liệu). |
 | `reports/alerts_summary.csv` | Đếm cảnh báo theo loại/mức. |
 | `reports/run_summary.csv` | Chốt 1 dòng: tổng bản tin, tỉ lệ thiếu, số reconnect, downtime, thời lượng, **`gateways_passed` / `gateways_failed` / `result` / `result_reason`** (xem §4 “Kết quả ĐẠT / KHÔNG ĐẠT”). Cột `duration_seconds` là **thời gian đo được đã trừ tạm dừng**; tổng thời gian nghỉ nằm ở cột `paused_seconds`. |
-| `reports/gateway_result.csv` | **Kết quả ĐẠT / KHÔNG ĐẠT** — 1 dòng mỗi gateway + 1 dòng **TỔNG** ở cuối file; mỗi tiêu chí 1 cột `PASS` / `FAIL` / `N/A` (26 cột). Xem §4. |
+| `reports/gateway_result.csv` | **Kết quả ĐẠT / KHÔNG ĐẠT** — 1 dòng mỗi gateway + 1 dòng **TỔNG** ở cuối file; mỗi tiêu chí 1 cột `PASS` / `FAIL` / `N/A` (28 cột, kèm `coverage_nodes` / `coverage_excluded`). Xem §4. |
 | `reports/focused_node_summary.csv` | **Node trọng tâm**: 1 dòng TỔNG + 1 dòng mỗi gateway — bắt hụt / bắn hụt, kèm **kiểu ngắt quãng** (`gap_runs`, `gap_largest`, `gap_pattern`). Chỉ sinh khi có node trọng tâm (§4 “Node trọng tâm”). |
 | `reports/focused_node_missing.csv` | Node trọng tâm: từng khoảng SEQ liên tiếp mà gateway không publish (bắt hụt), kèm mốc thời gian. |
 | `reports/focused_node_late.csv` | Node trọng tâm: từng lần publish bị trễ (bắn hụt) — nặng nhất trước, kèm `delay_seconds`. |
@@ -410,9 +410,36 @@ Ngoài ra mỗi gateway còn có cột `delay_avg/min/max_seconds` (độ trễ
 `received_at − gateway_timestamp`; **giá trị âm là bình thường** khi đồng hồ
 gateway chạy trước PC) và cột `notes` diễn giải bằng tiếng Việt.
 
-Gateway **đã cấu hình trong `devices.json` nhưng không publish bản tin nào** của
-node vẫn được ghi 1 dòng với bắt hụt 100% (`gateways_silent` trong log) — đây là
-ca đáng nghi nhất: gateway chết hoặc ra khỏi tầm sóng.
+Gateway đã lắp rải rác khắp nhà máy nên **không phải gateway nào cũng nghe được mọi
+node**. Bảng theo dõi vì vậy **chỉ liệt kê những gateway ĐÃ NGHE node này ít nhất 1
+bản tin** — gateway nằm ngoài tầm sóng không có lỗi gì, và một bảng đầy dòng “bắt
+hụt 100%” của chúng chỉ làm nhiễu đúng thứ cần đọc.
+
+- Tiêu chí để **hiện** là “nghe ≥ 1 bản tin” — bằng chứng vật lý duy nhất mà MQTT
+  cung cấp, **không có tham số nào** để lệch.
+- Số gateway bị ẩn **luôn được nói ra**, không im lặng: trên nhãn phía trên bảng
+  (tab Giám sát), trong cột `notes` của dòng **TỔNG**, và trong `warnings` khi
+  **Chốt lại báo cáo**.
+- Dòng **TỔNG** lấy mẫu số là **số gateway nghe được node này**, không phải số
+  gateway đã cấu hình — nên tỉ lệ bắt hụt không còn bị pha loãng bởi gateway ngoài tầm.
+
+> **Báo cáo cũ khác báo cáo mới.** Trước đây mọi gateway đã cấu hình đều được ghi 1
+> dòng (`focused_node_summary.csv` dài bằng số gateway trong `devices.json`). Nay file
+> ngắn hơn — đúng bằng số gateway nghe được node. Đây là **thay đổi có chủ ý**, không
+> phải mất dữ liệu. Muốn xem lại danh sách đầy đủ thì dùng cột `coverage_nodes` /
+> `coverage_excluded` của `gateway_result.csv` (xem §4) hoặc đối chiếu cột
+> **Số GW nghe** trong `node_summary.csv`.
+
+**Cột “Trạng thái nghe” — phân biệt *ngoài tầm* với *hỏng giữa phiên*.** Ca đáng
+nghi nhất không phải gateway chưa từng nghe (nó ở ngoài tầm sóng), mà là gateway
+**nghe được lúc đầu rồi ngừng publish**. Tool tách hai ca này bằng **đếm SEQ**, không
+bằng đồng hồ (đồng hồ gateway có thể lệch — xem `delay_seconds` âm):
+
+- `last_seq` = `seq` **lớn nhất** gateway này từng publish.
+- `tail_missing` = số `seq` node đã phát **sau** `last_seq`.
+- `status` = **“Đang nghe”** (`tail_missing == 0`) hoặc **“Ngừng publish giữa phiên”**
+  (`tail_missing > 0`). Nhóm thứ hai tuy vẫn hiện nhưng **xếp xuống cuối bảng**, vì
+  nguyên nhân khác hẳn nhóm đang nghe.
 
 **Kiểu ngắt quãng (`gap_pattern`).** Con số `missed_catch` một mình không phân
 biệt được hai nguyên nhân rất khác nhau. Tool quét lại bitmap `seq` của từng
@@ -505,6 +532,45 @@ không publish bản tin của node đó — nếu lấy mẫu số cả cụm t
 kết luận “hụt” một cách vô căn cứ. Vì `packets_expected` là mẫu số **riêng từng
 gateway**, dòng TỔNG **không** cộng cột này và để trống.
 
+**Ngưỡng “biết node” — nghe lỏm 1 bản tin không tính là biết node.** Mẫu số ở trên
+còn một kẽ hở: gateway chỉ cần nghe **một** bản tin lạc của một node ở **rìa vùng
+phủ** là **toàn bộ** số bản tin của node đó rơi vào mẫu số → độ phủ tụt xuống gần 0
+→ kết luận “KHÔNG ĐẠT” cho một gateway thật ra chỉ **nằm ngoài tầm sóng**. Ba tham
+số dưới đây chặn ca đó:
+
+| Tham số | Mặc định | Nghĩa |
+|---|---|---|
+| `min_hear_packets` | `3` | Nghe ≥ ngần này bản tin của node thì coi là “biết node” |
+| `min_hear_percent` | `0,5` | **Hoặc** nghe ≥ % này của tổng số bản tin node phát |
+| `min_hear_reference` | `3` | **Ngoại lệ node quá nhỏ**: node cả phiên chỉ phát ≤ ngần này bản tin thì **luôn** được tính, bất kể nghe ít cỡ nào |
+
+Một node vào mẫu số của gateway khi:
+
+```
+threshold(node) = max(min_hear_packets, ceil(reference[node] × min_hear_percent / 100))
+vào mẫu số  ⟺  số bản tin gateway nghe ≥ threshold(node)   HOẶC   reference[node] ≤ min_hear_reference
+```
+
+Ngưỡng đặt **rất thấp** vì mục đích là bỏ ca “một gói lạc”, **không** phải siết chất
+lượng: gateway nghe 1/1000 bản tin của node trong tầm vẫn bị tính là biết node.
+
+> **Ngưỡng này KHÁC ngưỡng “nghe được” của bảng node trọng tâm (§4).** Ở đây nó chỉ
+> quyết định **node nào vào mẫu số độ phủ**; **không** ẩn gateway khỏi báo cáo. Gộp
+> hai ngưỡng làm một là **âm thầm giấu** một gateway có vấn đề thật.
+
+**Loại node KHÔNG BAO GIỜ được làm kết luận nhẹ đi.** Bỏ node khỏi mẫu số luôn làm độ
+phủ **cao lên** (đó là mục đích), nhưng nếu việc loại đó khiến mẫu số **rỗng** — hoặc
+tụt xuống dưới `min_packets_for_rate` trong khi không loại thì vẫn đủ — thì tiêu chí
+Độ phủ chuyển từ `FAIL` sang **`N/A`**, tức gateway **dễ ĐẠT oan**. Hai ca đó bị chặn:
+quy tắc **bị bỏ hoàn toàn**, và `result_reason` ghi rõ
+`“KHÔNG loại node khỏi mẫu số độ phủ: …”` để không ai tưởng là đã lọc.
+
+**Hai cột công bố việc lọc** (ràng buộc “không bịa số” — con số phải tự kiểm chứng
+được): `coverage_nodes` = node **vào** mẫu số, `coverage_excluded` = node **bị loại**,
+cả hai dạng `UID:số_nghe/tổng_node`, nối bằng `|`. Việc loại node được nêu trong
+`result_reason` **kể cả khi gateway ĐẠT** — một gateway đạt *nhờ* việc loại node là
+chuyện người đọc báo cáo phải nhìn thấy được.
+
 **Cột `verdict` (tham khảo) — nhãn của trang *MQTT ↔ Ping*, KHÔNG chấm điểm.**
 
 Từ khi bỏ tiêu chí “Kết nối MQTT”, cột `verdict` chỉ còn để đọc nhanh tình trạng
@@ -533,7 +599,8 @@ Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%)
 
 Ngoài ra file còn có các cột số liệu thô để tự kiểm chứng:
 `mqtt_packets`, `packets_published`, `packets_expected`, `coverage_percent`,
-`missed_catch_percent`, `ping_total`, `ping_success_rate_percent`,
+`missed_catch_percent`, `coverage_nodes`, `coverage_excluded`,
+`ping_total`, `ping_success_rate_percent`,
 `downtime_events`, `downtime_seconds` *(tham khảo — không chấm điểm)*,
 `windows_total`, `silence_windows`,
 `silence_percent`, `verdict`, `late_percent`, và 3 cột đếm
@@ -590,6 +657,13 @@ trong `mqtt/` hay `ping/` bị ghi đè — có kiểm tra byte-for-byte trong
 | Phiên thiếu `reports/focused_node_summary.csv` | Tiêu chí `c_late` để **`N/A`** — không thể biết bắn hụt nếu chưa từng bật node trọng tâm |
 | `meta.json` **chưa có** `scoring_params` (phiên bản tool cũ) | Dùng ngưỡng **trong `config.json` hiện tại** và hiện cảnh báo, vì ngưỡng lúc chạy phiên không được lưu lại |
 | Phiên có `scoring_params` | Dùng **đúng ngưỡng của phiên**; ngưỡng trong `config.json` hiện tại bị bỏ qua |
+
+**Nút này KHÔNG dựng lại bảng *Node trọng tâm*.** Nó đọc lại
+`reports/focused_node_summary.csv` **có sẵn trên đĩa** để chấm tiêu chí
+`c_late`. Vì vậy một phiên chốt bằng bản tool cũ vẫn giữ nguyên bảng focus cũ
+(và các cột `last_seq` / `tail_missing` / `status` để **trống**). Muốn bảng focus
+được dựng lại theo quy tắc mới thì phải dùng nút **🧾 Chốt lại báo cáo** — nút đó
+mới đọc lại CSV thô và dựng lại `focused_node_summary.csv`.
 
 **Vì sao cần `scoring_params` trong `meta.json`.** Từ bản này, `meta.json` của mỗi
 phiên mới lưu thêm **ảnh chụp ngưỡng chấm điểm** (`scoring_params` —

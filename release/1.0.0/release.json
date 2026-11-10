@@ -26,8 +26,8 @@
                   },
                   {
                       "path":  "config/config.json",
-                      "bytes":  1957,
-                      "sha256":  "5cd065ab3fb610d5071b8a7857bb70b0f4b720123edc11e2d5febd3adb3be638"
+                      "bytes":  2045,
+                      "sha256":  "98674e619a839325210443f1965a949f42f1aaf8621e2f95e214c4bd98310c6b"
                   },
                   {
                       "path":  "config/devices.json",
@@ -41,13 +41,13 @@
                   },
                   {
                       "path":  "HUONG_DAN_SU_DUNG.md",
-                      "bytes":  53852,
-                      "sha256":  "6fa2578df301931bd44f73f96a90f255141b82aeb456faf83b95746f0e2f99bf"
+                      "bytes":  57326,
+                      "sha256":  "001a966ddff19b78c53d4e3aefec093ab71bafb111bb89b5372e204d2e992348"
                   },
                   {
                       "path":  "README.md",
-                      "bytes":  80058,
-                      "sha256":  "c9385e2c83c998212a88781e3d2fa716993f06a04efc493990a53c2ab73b4a6b"
+                      "bytes":  85660,
+                      "sha256":  "9035c7b5ef091868b527c1bbff84b102b73d2ad1659a44780075f49acd3e4fe8"
                   }
               ]
 }

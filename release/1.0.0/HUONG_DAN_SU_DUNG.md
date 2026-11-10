@@ -556,6 +556,26 @@ Tool so bản tin của node đó trên **mọi gateway**:
 Đây là bằng chứng **trực tiếp** phân biệt "gateway yếu" với "node không phát" — quan
 trọng khi kết luận. Kết quả ghi vào `reports/focused_node_*.csv`.
 
+**Bảng chỉ liệt kê gateway ĐÃ NGHE node này ít nhất 1 bản tin.** Gateway lắp ở khu
+vực khác của nhà máy thì không nghe được node này — đó **không phải lỗi của nó**,
+nên nó không xuất hiện trong bảng. Số gateway như vậy **luôn được ghi ra** ngay
+trên dòng nhãn phía trên bảng ("⚠ N gateway đã cấu hình KHÔNG nghe node này"), trong
+dòng **TỔNG** và trong phần cảnh báo khi chốt lại báo cáo — không ẩn im lặng.
+
+> **Bảng ngắn hơn trước đây.** Bản cũ ghi 1 dòng cho **mọi** gateway trong
+> `devices.json` (kể cả gateway ở xa không hề nghe được node), nên bảng đầy dòng
+> "bắt hụt 100%" vô nghĩa. Bản mới chỉ còn gateway trong tầm — **không mất dữ liệu**,
+> chỉ bỏ dòng nhiễu.
+
+**Cột "Trạng thái nghe"** cho biết gateway **còn đang nghe** hay **đã ngừng giữa
+phiên**:
+
+- **Đang nghe** — gateway vẫn publish bản tin mới nhất của node.
+- **Ngừng publish giữa phiên** — gateway nghe được lúc đầu rồi im hẳn (cột
+  **Hụt cuối phiên** cho biết node đã phát thêm bao nhiêu bản tin sau đó). Dòng này
+  **vẫn hiện** nhưng **xếp xuống cuối bảng** — đây là ca đáng nghi nhất, cần soi
+  trước tiên.
+
 > **Đổi node giữa phiên sẽ XOÁ số liệu của node cũ** (không trộn hai node vào một
 > bảng). Nếu muốn giữ số liệu node đang xem, đừng nháy đúp sang node khác.
 
@@ -654,6 +674,24 @@ Mở nhanh: **`reports/run_summary.csv`** có 4 cột chốt `gateways_passed`,
 **3 mức, không phải 2:** `N/A` = **chưa đủ dữ liệu để chấm** (chưa ping lần nào,
 chưa bật node trọng tâm, dưới `min_packets_for_rate`) — **khác hẳn** `FAIL`.
 
+**Tiêu chí 2 (Độ phủ) chỉ tính những node mà gateway THỰC SỰ nghe.** Gateway nằm
+ngoài tầm sóng của một node không bị trừ điểm vì không publish bản tin của node đó.
+Nhưng nếu chỉ cần nghe **một** bản tin lạc ở rìa vùng phủ là **cả node** rơi vào mẫu
+số thì độ phủ tụt xuống gần 0 → gateway bị "KHÔNG ĐẠT" oan. Vì vậy có thêm **ngưỡng
+"biết node"**: node chỉ được tính vào mẫu số khi gateway nghe được **đủ nhiều** bản
+tin của node đó (xem bảng §6.4). Node cả phiên chỉ phát rất ít bản tin thì **luôn**
+được tính, để gateway vẫn có mẫu số mà chấm.
+
+Mỗi dòng đều công bố rõ node nào được tính / bị loại (2 cột `coverage_nodes` và
+`coverage_excluded`, dạng `UID:số_nghe/tổng_node`). Việc loại node được ghi trong
+`result_reason` **kể cả khi gateway ĐẠT** — một gateway đạt *nhờ* việc loại node là
+chuyện phải nhìn thấy được, không giấu.
+
+> **Loại node không bao giờ được làm kết luận nhẹ đi.** Nếu việc loại khiến mẫu số
+> **rỗng** hoặc tụt xuống dưới `min_packets_for_rate`, tiêu chí sẽ chuyển `FAIL` →
+> `N/A` (gateway dễ đạt oan). Gặp ca đó, tool **bỏ luôn quy tắc lọc** và ghi rõ
+> trong `result_reason`: *"KHÔNG loại node khỏi mẫu số độ phủ…"*.
+
 **Một gateway ĐẠT chỉ khi không tiêu chí nào `FAIL`** (`N/A` không cản). Ngược lại là
 `KHÔNG ĐẠT`, và cột `result_reason` ghi rõ **tiêu chí nào hỏng kèm số so với ngưỡng**,
 ví dụ:
@@ -685,6 +723,13 @@ Tỉ lệ ping: ping OK 89.32% (cần ≥ 90.00%)
 | `criteria_min_ping_ok_percent` | `90.0` | Ping OK tối thiểu (%) |
 | `criteria_max_late_percent` | `5.0` | % publish trễ tối đa (khi có node trọng tâm) |
 | `min_packets_for_rate` | `50` | Cỡ mẫu tối thiểu; dưới ngưỡng → `N/A` |
+| `min_hear_packets` | `3` | Nghe ≥ ngần này bản tin của node thì node mới vào mẫu số |
+| `min_hear_percent` | `0.5` | **Hoặc** nghe ≥ % này của tổng số bản tin node phát |
+| `min_hear_reference` | `3` | Node cả phiên chỉ phát ≤ ngần này bản tin thì **luôn** được tính |
+
+Ba khoá `min_hear_*` chỉ quyết định **node nào vào mẫu số độ phủ** (tiêu chí 2) —
+**không** ảnh hưởng tới việc gateway có hiện trên bảng *Node trọng tâm* hay không.
+Đặt cả ba về `0` để tắt hẳn quy tắc lọc (hành vi như bản cũ).
 
 Mỗi phiên lưu **ảnh chụp ngưỡng** vào `meta.json` (`scoring_params`) lúc bắt đầu, nên
 "Chấm lại kết quả" luôn cho **cùng kết quả** với lúc chốt — không phụ thuộc config hiện tại.
